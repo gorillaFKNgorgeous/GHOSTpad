@@ -2,6 +2,16 @@
 
 Updated: **8 September 2026**, for the live MCP bridge implementation.
 
+## Canonical-source migration — 12 September 2026
+
+The migration that will make GHOSTpad contain its pinned Blender source is planned but
+blocked: this execution environment could not retrieve commit
+`2bc556e58e82eb3a801895f2cb1881c0267e5cd5` or its Git LFS objects. The existing build
+workflow remains unchanged so the working reconstruction path is not broken. See
+[GHOSTBLENDER_MIGRATION_PLAN.md](GHOSTBLENDER_MIGRATION_PLAN.md) and
+[GHOSTBLENDER_SOURCE_AUDIT.md](GHOSTBLENDER_SOURCE_AUDIT.md). Do not claim that CI builds
+checked-in Blender source until the import and equivalence checks are complete.
+
 ## Live MCP bridge — 8 September 2026
 
 New native transport, main-thread runtime tools, durable relay jobs, OAuth,

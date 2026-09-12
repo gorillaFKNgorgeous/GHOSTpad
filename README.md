@@ -4,6 +4,13 @@ GhostBlender brings Blender to iPad as a native application, with the ambition o
 
 This repository contains the workflows, dependency bootstrap, packaging scripts, and compatibility changes used to build a pinned Blender iOS source tree. The current target is **Blender 5.2 on a 1 TB iPad Pro M4 with 16 GB RAM**, running iPadOS 27. The deployment minimum is iPadOS 26.0. This remains an experimental community port.
 
+> **Canonical-source migration:** The planned import of the complete pinned Blender
+> source is currently blocked because the migration environment could not access the
+> upstream Git/LFS objects. The repository therefore still uses its working source
+> reconstruction workflow; it must not yet be described as a canonical source checkout.
+> See the [migration plan](GHOSTBLENDER_MIGRATION_PLAN.md) and
+> [source audit](GHOSTBLENDER_SOURCE_AUDIT.md) for the exact status and resume steps.
+
 **Current working baseline: build #81, confirmed by the owner on 6 September 2026.** Saving and file functions work in normal use; exhaustive edge-case testing remains follow-up work. **`main` is the sole development branch** and contains this implementation. Siri, the offline assistant, and agent access are future development on this baseline.
 
 ## Live agent connection implementation

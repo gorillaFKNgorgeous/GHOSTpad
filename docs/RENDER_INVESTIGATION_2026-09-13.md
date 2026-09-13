@@ -83,3 +83,5 @@ Source trace at salmazov/blender-ios 2bc556e58e82eb3a801895f2cb1881c0267e5cd5:
 - editors/render/render_internal.cc: screen_render_exec and render_startjob both call RE_RenderFrame. The interactive path additionally has render_endjob / RE_display_free cleanup.
 - draw/engines/eevee/eevee_engine.cc: EEVEE enters DRW_render_to_image, creates an Instance, and deletes it after that call.
 - Given confirmed synchronous failure before post, prioritize the shared native pipeline and memory/GPU evidence over an interactive cleanup-only theory.
+
+S02 follow-up: a later heartbeat was observed at 1789317839.3447335 (same boot/scene), with physical footprint 5137894856 and available process memory 1304556088 bytes. This shows some later bridge activity but does not establish render completion. A subsequent result-read request still returned device_offline_or_suspended. The peak and final render state remain unknown.

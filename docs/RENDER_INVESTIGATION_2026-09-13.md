@@ -1,7 +1,7 @@
 # Live iPad render investigation — 2026-09-13 UTC
 
 ## Status
-Investigation incomplete: the device stopped reporting during the first unchanged synchronous render. This is not yet a confirmed process termination; a blocked main thread also stops this bridge. No crash cause or fix has been established. Reconnect the app and retrieve the durable render-stage log before running another test.
+Investigation incomplete: the owner confirmed the app closed during S01. Its durable stage log was retrieved after relaunch. No crash cause or fix has been established. See the recovery update below.
 
 ## Device and baseline
 - Live Ghostblender Simple connection; Blender 5.2.0 LTS, Python 3.13.13, Blender source hash 2bc556e58e82.
@@ -53,3 +53,33 @@ Reviewed GHOSTpad main at 90df05088be46a318332fca1cddcce9dbe0826ab.
 5. If memory pressure is implicated, test one reversible change at a time (ray tracing, shadow allocation, texture working set) and record quality and memory effects. Preserve source textures and original project.
 6. Add native render-stage/thread/GPU-context, allocation and cleanup telemetry in a separate diagnostic commit once the failure stage is known. Use actual headroom in future shader concurrency policy, with device validation.
 7. A native fix requires a new IPA and repeat device tests. A successful reduced-quality render alone would not establish that interactive rendering is fixed.
+
+## Recovery and S02 update
+
+The owner confirmed S01 closed the app and reopened to the splash screen. The bridge connected successfully on the splash screen with a new boot ID e37c02b894174889abc3b7115a88e4fb, an untitled default scene and three objects.
+
+Recovered S01 stages:
+| Stage | Unix time | Physical footprint bytes | Available process bytes |
+|---|---:|---:|---:|
+| armed_unchanged_baseline | 1789317463.6754382 | 4617342288 | 1825108656 |
+| sync_before | 1789317465.6868339 | 4392160592 | 2050290352 |
+| render_init | 1789317465.687936 | 4392160592 | 2050290352 |
+| render_pre | 1789317465.6884632 | 4392160592 | 2050290352 |
+
+No render_post, render_complete, render_cancel, returned operator status, or caught Python exception was present. Termination happened after render_pre and before post/completion; this is still a broad interval covering native evaluation/render work. S01 proves this scene also fails through synchronous rendering, so an interactive-only explanation is insufficient.
+
+On relaunch footprint was 1926645320 bytes, with 4515805624 available (approximately 6 GiB combined). Read-only inspection found:
+- embedded.mobileprovision permits increased-memory-limit, increased-debugging-memory-limit, and get-task-allow.
+- The executable's Mach-O LC_CODE_SIGNATURE XML entitlements ALSO contain all three, set true. Read from the installed binary's embedded signature, not inferred from a filename.
+- This establishes their presence, not their effective runtime allowance or the termination reason. The actual measured budget remains the relevant observation.
+- Bundle short/build version both 5.2.0, minimum OS 26.0; this is insufficient to uniquely identify a CI harness revision.
+- iPadOS denied app access to /var/mobile/Library/Logs/CrashReporter; no app-private CrashReporter directory exists. User-exported Analytics Data is required for the OS termination report.
+
+Reopened the original imported file through Blender. Fresh-load footprint was about 2.49–2.51 GB with 3.93–3.95 GB headroom, lower than S01 after inspection. Thus cold/warm cache state is a confounder; do not attribute any outcome difference solely to the setting below. Reading unloaded image metadata may itself materialize image data; avoid repeating broad image-size inspection during controlled memory tests.
+
+S02: scheduled the same synchronous render with ONLY EEVEE use_raytracing changed from true to false. Frame 85, 1000 × 500, 128 samples, source textures retained. The callback restores the setting on return and does not save the original file. Stage logging uses the same JSONL with test=S02_raytracing_off. Arming job b722a1054362411bb7803ba5da21771b succeeded; later status became offline with last heartbeat 1789317805.9412668. S02 is unresolved until the app state/log is recovered; offline alone is not confirmation of another crash.
+
+Source trace at salmazov/blender-ios 2bc556e58e82eb3a801895f2cb1881c0267e5cd5:
+- editors/render/render_internal.cc: screen_render_exec and render_startjob both call RE_RenderFrame. The interactive path additionally has render_endjob / RE_display_free cleanup.
+- draw/engines/eevee/eevee_engine.cc: EEVEE enters DRW_render_to_image, creates an Instance, and deletes it after that call.
+- Given confirmed synchronous failure before post, prioritize the shared native pipeline and memory/GPU evidence over an interactive cleanup-only theory.

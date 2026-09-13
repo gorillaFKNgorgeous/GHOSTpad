@@ -1,0 +1,136 @@
+--- a/source/blender/gpu/intern/gpu_pass.cc
++++ b/source/blender/gpu/intern/gpu_pass.cc
+@@ -23,6 +23,50 @@
+ 
+ #include <mutex>
+ #include <string>
++
++
++#ifdef WITH_APPLE_CROSSPLATFORM
++#  include <cstdio>
++#  include <cstdlib>
++#  include <mach/mach.h>
++#  include <os/proc.h>
++#  include <pthread.h>
++#  include <sys/time.h>
++#  include <unistd.h>
++
++/* Diagnostic only: no cache repair, skipped work, or changed ownership. */
++static void ios_pass_cache_trace(const char *event, const void *cache, const void *pass = nullptr)
++{
++  const char *home = getenv("HOME");
++  if (!home) {
++    return;
++  }
++  char path[4096];
++  const int length = snprintf(path, sizeof(path), "%s/Documents/BlenderRenderCache.log", home);
++  if (length < 0 || size_t(length) >= sizeof(path)) {
++    return;
++  }
++  uint64_t tid = 0;
++  pthread_threadid_np(nullptr, &tid);
++  task_vm_info_data_t vm = {};
++  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
++  const kern_return_t status = task_info(mach_task_self(), TASK_VM_INFO,
++                                         reinterpret_cast<task_info_t>(&vm), &count);
++  timeval now = {};
++  gettimeofday(&now, nullptr);
++  if (FILE *file = fopen(path, "a")) {
++    fprintf(file, "%lld.%06d pid=%d tid=%llu event=%s cache=%p pass=%p "
++                  "footprint=%llu available=%llu task_info=%d\n",
++            static_cast<long long>(now.tv_sec), int(now.tv_usec), int(getpid()),
++            static_cast<unsigned long long>(tid), event, cache, pass,
++            status == KERN_SUCCESS ? static_cast<unsigned long long>(vm.phys_footprint) : 0ULL,
++            static_cast<unsigned long long>(os_proc_available_memory()), int(status));
++    fflush(file);
++    fsync(fileno(file));
++    fclose(file);
++  }
++}
++#endif
+ 
+ namespace blender {
+ 
+@@ -222,6 +266,9 @@
+  public:
+   ~GPUPassCache()
+   {
++#ifdef WITH_APPLE_CROSSPLATFORM
++    ios_pass_cache_trace("destructor_begin", this);
++#endif
+     /* Pause to prevent new compilations to start while we are cancelling them. */
+     GPU_shader_compiler_pause();
+     for (int i : IndexRange(GPU_MAT_ENGINE_MAX)) {
+@@ -229,6 +276,9 @@
+       passes_[i][1].clear();
+     }
+     GPU_shader_compiler_resume();
++#ifdef WITH_APPLE_CROSSPLATFORM
++    ios_pass_cache_trace("destructor_end", this);
++#endif
+   }
+ 
+   void add(eGPUMaterialEngine engine,
+@@ -268,6 +318,11 @@
+     /* Base Passes. */
+     for (auto &engine_passes : passes_) {
+       for (std::unique_ptr<GPUPass> &pass : engine_passes[false].values()) {
++#ifdef WITH_APPLE_CROSSPLATFORM
++        if (!pass) {
++          ios_pass_cache_trace("null_base_pass", this);
++        }
++#endif
+         pass->update(timestamp);
+       }
+ 
+@@ -278,6 +333,11 @@
+     /* Optimization Passes */
+     for (auto &engine_passes : passes_) {
+       for (std::unique_ptr<GPUPass> &pass : engine_passes[true].values()) {
++#ifdef WITH_APPLE_CROSSPLATFORM
++        if (!pass) {
++          ios_pass_cache_trace("null_optimized_pass", this);
++        }
++#endif
+         pass->update(timestamp);
+       }
+ 
+@@ -307,11 +367,24 @@
+ 
+ void GPU_pass_cache_init()
+ {
++#ifdef WITH_APPLE_CROSSPLATFORM
++  ios_pass_cache_trace("init_before", g_cache);
++#endif
+   g_cache = MEM_new<GPUPassCache>(__func__);
++#ifdef WITH_APPLE_CROSSPLATFORM
++  ios_pass_cache_trace("init_after", g_cache);
++#endif
+ }
+ 
+ void GPU_pass_cache_update()
+ {
++#ifdef WITH_APPLE_CROSSPLATFORM
++  static thread_local bool first_update = true;
++  if (first_update || !g_cache) {
++    ios_pass_cache_trace(g_cache ? "first_thread_update" : "null_cache_update", g_cache);
++    first_update = false;
++  }
++#endif
+   g_cache->update();
+ }
+ 
+@@ -323,7 +396,13 @@
+ 
+ void GPU_pass_cache_free()
+ {
++#ifdef WITH_APPLE_CROSSPLATFORM
++  ios_pass_cache_trace("free_before", g_cache);
++#endif
+   MEM_SAFE_DELETE(g_cache);
++#ifdef WITH_APPLE_CROSSPLATFORM
++  ios_pass_cache_trace("free_after", g_cache);
++#endif
+ }
+ 
+ /** \} */

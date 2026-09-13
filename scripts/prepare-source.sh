@@ -160,6 +160,8 @@ git -C "$SOURCE_DIR" apply "$RUNTIME_LINKAGE_PATCH"
 git -C "$SOURCE_DIR" apply --check "$FILES_LIFECYCLE_PATCH"
 git -C "$SOURCE_DIR" apply "$FILES_LIFECYCLE_PATCH"
 python3 "$CODEC_TRANSFORM" "$SOURCE_DIR"
+git -C "$SOURCE_DIR" apply --check "$HARNESS_DIR/patches/ios-pass-cache-diagnostics.patch"
+git -C "$SOURCE_DIR" apply "$HARNESS_DIR/patches/ios-pass-cache-diagnostics.patch"
 python3 "$HARNESS_DIR/scripts/apply-ios-agent-bridge.py" "$SOURCE_DIR"
 git -C "$SOURCE_DIR" diff --check
 
@@ -328,6 +330,7 @@ Blender revision: $actual_blender_ref
 iOS libraries: $actual_ios_lib_ref
 macOS host libraries: $actual_macos_lib_ref
 Bundle identifier: $BUNDLE_ID
+Pass cache diagnostic patch SHA-256: $(shasum -a 256 "$HARNESS_DIR/patches/ios-pass-cache-diagnostics.patch" | awk '{print $1}')
 Compatibility patch SHA-256: $(shasum -a 256 "$IOS_PATCH" | awk '{print $1}')
 Live-view geometry patch SHA-256: $(shasum -a 256 "$GEOMETRY_PATCH" | awk '{print $1}')
 Native Files patch SHA-256: $(shasum -a 256 "$NATIVE_FILES_PATCH" | awk '{print $1}')

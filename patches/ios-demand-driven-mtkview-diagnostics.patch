@@ -1,7 +1,7 @@
 diff --git a/intern/ghost/intern/GHOST_SystemIOS.mm b/intern/ghost/intern/GHOST_SystemIOS.mm
 --- a/intern/ghost/intern/GHOST_SystemIOS.mm
 +++ b/intern/ghost/intern/GHOST_SystemIOS.mm
-@@ -250,6 +250,51 @@
+@@ -250,6 +250,54 @@
  
  @end
  
@@ -56,7 +56,7 @@ diff --git a/intern/ghost/intern/GHOST_SystemIOS.mm b/intern/ghost/intern/GHOST_
  @implementation GHOST_IOSMetalRenderer
  {
    id<MTLDevice> _device;
-@@ -275,6 +320,7 @@
+@@ -275,6 +323,7 @@
  
  - (void)drawInMTKView:(nonnull MTKView *)MTKView
  {
@@ -64,7 +64,7 @@ diff --git a/intern/ghost/intern/GHOST_SystemIOS.mm b/intern/ghost/intern/GHOST_
    GHOST_SystemIOS *system = static_cast<GHOST_SystemIOS *>(GHOST_ISystem::getSystem());
  
    /* We should always have a window... */
-@@ -315,6 +361,8 @@
+@@ -315,6 +364,8 @@
      system->next_active_window->makeKeyWindow();
      system->next_active_window = nullptr;
    }
@@ -76,7 +76,7 @@ diff --git a/intern/ghost/intern/GHOST_SystemIOS.mm b/intern/ghost/intern/GHOST_
 diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_WindowIOS.mm
 --- a/intern/ghost/intern/GHOST_WindowIOS.mm
 +++ b/intern/ghost/intern/GHOST_WindowIOS.mm
-@@ -1230,6 +1230,51 @@
+@@ -1230,6 +1230,52 @@
  
  @end
  
@@ -129,7 +129,7 @@ diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_
  @interface GHOST_IOSViewController : UIViewController
  
  - (nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)mtkView
-@@ -1260,11 +1305,11 @@
+@@ -1260,10 +1306,10 @@
    _view = (MTKView *)self.view;
    _view.multipleTouchEnabled = YES;
    _view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -142,7 +142,7 @@ diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_
    _view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
    _view.autoResizeDrawable = YES;
    _view.contentMode = UIViewContentModeScaleToFill;
-@@ -1277,9 +1322,10 @@
+@@ -1277,9 +1323,10 @@
    if (displayScale > 0) {
      _view.contentScaleFactor = displayScale;
    }
@@ -155,7 +155,7 @@ diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_
    [updateLink setEnabled:YES];
    _renderer = [[GHOST_IOSMetalRenderer alloc] initWithMetalKitView:_view];
    if (!_renderer) {
-@@ -1295,6 +1341,7 @@
+@@ -1295,6 +1342,7 @@
    [_renderer mtkView:_view drawableSizeWillChange:_view.drawableSize];
  
    _view.delegate = _renderer;
@@ -163,7 +163,7 @@ diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_
    [self synchronizeViewGeometry];
  }
  
-@@ -1380,7 +1427,9 @@
+@@ -1380,7 +1428,8 @@
  
  - (void)updateLinkDidFire:(UIUpdateLink *)link
  {
@@ -183,7 +183,7 @@ diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_
  }
  
  void GHOST_WindowIOS::getWindowBounds(GHOST_Rect &bounds) const
-@@ -2014,8 +2064,13 @@
+@@ -2014,8 +2064,12 @@
      [rootWindow layoutIfNeeded];
    }
    setNativePixelSize();

@@ -1,7 +1,7 @@
 # Live iPad render investigation — 2026-09-13 UTC
 
 ## Status
-Investigation incomplete: the owner confirmed the app closed during S01. Its durable stage log was retrieved after relaunch. No crash cause or fix has been established. See the recovery update below.
+Uploaded OS reports and installed-machine-code inspection confirm null shader-pass/cache dereferences in GPUPassCache::update. S02 rendered successfully and then crashed during viewport drawing about 1.4 seconds later. Native cache-lifecycle diagnostics are committed; the cause of the invalid lifetime/state and a verified fix remain outstanding. See the latest OS-report section below. Earlier observations are retained chronologically.
 
 ## Device and baseline
 - Live Ghostblender Simple connection; Blender 5.2.0 LTS, Python 3.13.13, Blender source hash 2bc556e58e82.
@@ -85,3 +85,52 @@ Source trace at salmazov/blender-ios 2bc556e58e82eb3a801895f2cb1881c0267e5cd5:
 - Given confirmed synchronous failure before post, prioritize the shared native pipeline and memory/GPU evidence over an interactive cleanup-only theory.
 
 S02 follow-up: a later heartbeat was observed at 1789317839.3447335 (same boot/scene), with physical footprint 5137894856 and available process memory 1304556088 bytes. This shows some later bridge activity but does not establish render completion. A subsequent result-read request still returned device_offline_or_suspended. The peak and final render state remain unknown.
+
+
+## Uploaded OS reports and verified instructions — 2026-09-14 Sydney
+
+These reports materially change the diagnosis. The supplied Jetsam records do not identify Blender as a killed process. The concrete Blender failures are segmentation faults in the shader-pass cache. Memory headroom remains worth tracking, but is not established as the immediate cause.
+
+| Report filename suffix | Sydney capture time | Evidence |
+|---|---|---|
+| 022603 | 02:26:02.493 | EEVEE render worker; GPUPassCache::update +176; invalid read at 0x8 |
+| 022726 | 02:27:25.508 | Re-raised SIGSEGV; sampled system-loop stack is insufficient to identify original fault |
+| 022947 | 02:29:46.274 | Same render-worker fault and offset; main-thread stack also includes crash handling above cache update |
+| 023034 | 02:30:33.464 | Re-raised SIGSEGV; another thread contains crash handler above cache update / wm_draw_update |
+| 024400 | 02:43:59.399 | Main-thread viewport update; pthread_mutex_lock on 0x2c0, reached from GPUPassCache::update +48 |
+
+All inspected crash executables have UUID edc8c421-1ff7-3285-ac2f-182b14e99b4e. The currently installed binary has the same UUID. Read 420 bytes at image-relative offset 10571036 (function entry), mapped through its Mach-O segment table, directly from the installed executable. Capstone ARM64 disassembly confirms:
+
+- Entry +36: mov x19, x0 (cache this pointer).
+- +40: add x0, x0, #0x2c0 (address of cache mutex).
+- +44: branch to mutex lock. The 024400 report has x0=704 (0x2c0), consistent with a null cache this pointer.
+- +172: ldr x20, [x8, #8] (cached pass pointer).
+- +176: ldr x0, [x20, #8] (pass compilation_handle). Both render-worker reports have x20=0 and fault address 8. Thus these crashes dereference a null cached pass, not merely an assumed null GPU context.
+
+The pinned gpu_pass.cc source matches this layout: update iterates unique_ptr<GPUPass> entries without null checks; GPU_pass_cache_update invokes g_cache->update without checking g_cache; GPU_pass_cache_free deletes and clears the global cache. What caused the null pass/cache state is still unproven. Do not treat a silent null-check/skip as a complete fix or claim that allocation failure, race, or teardown has been established.
+
+### S02 recovered outcome
+
+Recovered durable log confirms ray-tracing-off render reached render_post and render_complete at 1789317837.975, then returned FINISHED at 1789317837.988. Start was 1789317806.566: approximately 31.42 seconds. Completion footprint 5195468184 bytes, available 1246982760 bytes. The callback then restored ray tracing to its original value. Crash 024400 occurred about 1.41 seconds after the render returned, in viewport cache update. Rendering completed, but the session did not survive return to viewport. No image was saved by this test before the crash. This does not prove restoring ray tracing caused the crash.
+
+The provided reports do not contain an exact 02:37:45 S01 crash entry. S01's termination is owner-confirmed and its stage log ends at render_pre, but its precise native stack must not be inferred from earlier reports. Earlier worker crashes precede our controlled tests.
+
+### Other supplied logs
+
+- Jetsam 002037 and 012054: FileProvider killed for per-process-limit; Blender absent from their process lists.
+- Jetsam 022114: CoreSpotlightTextImporter/FileProvider have kill reasons; Blender is listed without a kill reason.
+- diskwrites_resource 022413: about 1.074 GB dirtied over 5923 seconds; explicitly Action taken: none. It is a separate resource warning, not a render crash verdict. Investigate sustained writes independently.
+- BlenderFiles(7).log has no matching render/SIG/error markers; it is the document-handoff log, not native render telemetry.
+- OS reports identify iPadOS 27.0 build 24A5430a and iPad16,5.
+
+### Native diagnostic implementation
+
+Added patches/ios-pass-cache-diagnostics.patch, applied by scripts/prepare-source.sh and hashed in the source manifest. On WITH_APPLE_CROSSPLATFORM builds it writes Documents/BlenderRenderCache.log with wall time, PID, thread ID, cache/pass pointers, physical footprint and available process memory:
+- cache init/free before and after;
+- destructor begin/end;
+- first cache update on each thread;
+- null global cache and null base/optimized pass observations immediately before existing dereferences.
+
+This is telemetry only: no cache ownership changes, no skipped passes, no claimed fix. Each rare event is flushed/fsynced to survive termination. Logging introduces timing/I/O perturbation, particularly lifecycle and first-thread events; it is not a continuous peak-memory sampler. No raw uploaded analytics reports were published.
+
+Validation: patch applies cleanly to the exact pinned gpu_pass.cc; prepare-source.sh passes bash -n. Native compilation and installed-device validation remain outstanding; this environment has no iOS SDK. Install a new diagnostic IPA, reproduce one unchanged render, and retrieve BlenderRenderCache.log plus the matching OS report. The lifecycle/thread ordering should distinguish null-before-init, teardown/re-entry, and null-entry conditions. Preserve normal file handling and all rendering features while investigating ownership.

@@ -9,6 +9,8 @@ GEOMETRY_PATCH="$HARNESS_DIR/patches/ios-live-view-geometry.patch"
 NATIVE_FILES_PATCH="$HARNESS_DIR/patches/ios-native-files.patch"
 RUNTIME_LINKAGE_PATCH="$HARNESS_DIR/patches/ios-runtime-linkage.patch"
 FILES_LIFECYCLE_PATCH="$HARNESS_DIR/patches/ios-files-lifecycle-v2.patch"
+PASS_CACHE_DIAGNOSTICS_PATCH="$HARNESS_DIR/patches/ios-pass-cache-diagnostics.patch"
+MTKVIEW_DIAGNOSTICS_PATCH="$HARNESS_DIR/patches/ios-demand-driven-mtkview-diagnostics.patch"
 CODEC_TRANSFORM="$HARNESS_DIR/scripts/apply-ios-codec-frameworks.py"
 
 SOURCE_DIR="${1:-$PWD/work/blender}"
@@ -89,6 +91,14 @@ if [[ ! -f "$FILES_LIFECYCLE_PATCH" ]]; then
   echo "Missing iOS Files lifecycle patch: $FILES_LIFECYCLE_PATCH" >&2
   exit 1
 fi
+if [[ ! -f "$PASS_CACHE_DIAGNOSTICS_PATCH" ]]; then
+  echo "Missing GPU pass-cache diagnostic patch: $PASS_CACHE_DIAGNOSTICS_PATCH" >&2
+  exit 1
+fi
+if [[ ! -f "$MTKVIEW_DIAGNOSTICS_PATCH" ]]; then
+  echo "Missing demand-driven MTKView diagnostic patch: $MTKVIEW_DIAGNOSTICS_PATCH" >&2
+  exit 1
+fi
 if [[ ! -f "$CODEC_TRANSFORM" ]]; then
   echo "Missing iOS codec framework transform: $CODEC_TRANSFORM" >&2
   exit 1
@@ -160,8 +170,10 @@ git -C "$SOURCE_DIR" apply "$RUNTIME_LINKAGE_PATCH"
 git -C "$SOURCE_DIR" apply --check "$FILES_LIFECYCLE_PATCH"
 git -C "$SOURCE_DIR" apply "$FILES_LIFECYCLE_PATCH"
 python3 "$CODEC_TRANSFORM" "$SOURCE_DIR"
-git -C "$SOURCE_DIR" apply --check "$HARNESS_DIR/patches/ios-pass-cache-diagnostics.patch"
-git -C "$SOURCE_DIR" apply "$HARNESS_DIR/patches/ios-pass-cache-diagnostics.patch"
+git -C "$SOURCE_DIR" apply --check "$PASS_CACHE_DIAGNOSTICS_PATCH"
+git -C "$SOURCE_DIR" apply "$PASS_CACHE_DIAGNOSTICS_PATCH"
+git -C "$SOURCE_DIR" apply --check "$MTKVIEW_DIAGNOSTICS_PATCH"
+git -C "$SOURCE_DIR" apply "$MTKVIEW_DIAGNOSTICS_PATCH"
 python3 "$HARNESS_DIR/scripts/apply-ios-agent-bridge.py" "$SOURCE_DIR"
 git -C "$SOURCE_DIR" diff --check
 
@@ -207,6 +219,12 @@ grep -Fq '_view.drawableSize = expectedDrawableSize;' "$input_window"
 grep -Fq '[m_uiview_controller loadViewIfNeeded];' "$input_window"
 grep -Fq 'm_metalView.frame = rootWindow.bounds;' "$input_window"
 grep -Fq 'return m_metalView.bounds.size;' "$input_window"
+grep -Fq 'BlenderMetalRedraw.log' "$input_system"
+grep -Fq 'ghost_ios_log_metal_redraw(@"draw_enter", MTKView);' "$input_system"
+grep -Fq '_view.enableSetNeedsDisplay = YES;' "$input_window"
+grep -Fq '_view.paused = YES;' "$input_window"
+grep -Fq 'updateLink.requiresContinuousUpdates = NO;' "$input_window"
+grep -Fq 'ghost_ios_log_metal_redraw_request(@"blender_request", m_metalView);' "$input_window"
 python3 - "$native_files" <<'PY'
 from pathlib import Path
 import sys
@@ -330,7 +348,8 @@ Blender revision: $actual_blender_ref
 iOS libraries: $actual_ios_lib_ref
 macOS host libraries: $actual_macos_lib_ref
 Bundle identifier: $BUNDLE_ID
-Pass cache diagnostic patch SHA-256: $(shasum -a 256 "$HARNESS_DIR/patches/ios-pass-cache-diagnostics.patch" | awk '{print $1}')
+Pass cache diagnostic patch SHA-256: $(shasum -a 256 "$PASS_CACHE_DIAGNOSTICS_PATCH" | awk '{print $1}')
+Demand-driven MTKView diagnostic patch SHA-256: $(shasum -a 256 "$MTKVIEW_DIAGNOSTICS_PATCH" | awk '{print $1}')
 Compatibility patch SHA-256: $(shasum -a 256 "$IOS_PATCH" | awk '{print $1}')
 Live-view geometry patch SHA-256: $(shasum -a 256 "$GEOMETRY_PATCH" | awk '{print $1}')
 Native Files patch SHA-256: $(shasum -a 256 "$NATIVE_FILES_PATCH" | awk '{print $1}')

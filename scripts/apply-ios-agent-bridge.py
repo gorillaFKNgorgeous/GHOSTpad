@@ -56,6 +56,21 @@ endif()
     cmake.write_text(cm.replace(anchor, addition + anchor, 1))
     shutil.copyfile(harness / 'agent/native/ghostbridge_transport.mm', interface.parent / 'ghostbridge_transport.mm')
     shutil.copytree(harness / 'agent/runtime', target, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+
+    # Surface the persistent native render diagnostics through the existing MCP diagnostics
+    # operation. This is intentionally a build-time transform so the source runtime can stay
+    # platform-neutral while the iPad package exposes its native Documents logs after a crash.
+    runtime_core = target / 'core.py'
+    runtime_content = runtime_core.read_text()
+    log_anchor = "for name in ('BlenderFiles.log', 'BlenderRuntimeProbe.txt'):"
+    log_replacement = (
+        "for name in ('BlenderFiles.log', 'BlenderRuntimeProbe.txt', "
+        "'BlenderRenderCache.log', 'BlenderMetalRedraw.log'):"
+    )
+    if runtime_content.count(log_anchor) != 1:
+        raise RuntimeError('Pinned GhostBlender diagnostics log anchor changed')
+    runtime_core.write_text(runtime_content.replace(log_anchor, log_replacement, 1))
+
     print('Installed native transport and persistent GhostBlender startup dispatcher')
 
 

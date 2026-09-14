@@ -134,3 +134,43 @@
  }
  
  /** \} */
+--- a/intern/ghost/intern/GHOST_SystemIOS.mm
++++ b/intern/ghost/intern/GHOST_SystemIOS.mm
+@@ -130,7 +130,7 @@
+     available = (size_t)os_proc_available_memory();
+   }
+ 
+-  NSLog(@"Blender: iOS memory warning! Available: %.0f MB",
++  NSLog(@"[IOS_MEMORY_WARNING] enter available_mb=%.0f",
+         (double)available / (1024.0 * 1024.0));
+ 
+   /* Force an autosave in case iOS kills us next. */
+@@ -138,8 +138,15 @@
+     WM_ios_autosave((void *)C);
+   }
+ 
+-  /* Free GPU caches and trim undo history. */
++  /* Trim reclaimable memory without destroying lifetime-owned GPU pass state. */
+   if (C) {
+     WM_ios_reduce_memory((void *)C);
+   }
++
++  size_t available_after = 0;
++  if (@available(iOS 13.0, *)) {
++    available_after = (size_t)os_proc_available_memory();
++  }
++  NSLog(@"[IOS_MEMORY_WARNING] exit available_mb=%.0f",
++        (double)available_after / (1024.0 * 1024.0));
+ }
+--- a/source/blender/windowmanager/intern/wm_ios_bridge.cc
++++ b/source/blender/windowmanager/intern/wm_ios_bridge.cc
+@@ -82,6 +82,7 @@
+   /* Free unused GPU textures cached by images. */
+   blender::BKE_image_free_unused_gpu_textures();
+ 
+-  /* Free stale compiled shader passes. */
+-  blender::GPU_pass_cache_free();
++  /* GPUPassCache has application lifetime. GPUMaterial instances can retain pointers to its
++   * passes, so destroying it from a transient iOS memory warning creates dangling references.
++   * Preserve it here and let the normal GPU shutdown path own cache destruction. */
+ }

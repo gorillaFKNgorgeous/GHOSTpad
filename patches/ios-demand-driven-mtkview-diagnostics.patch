@@ -136,15 +136,22 @@ diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_
  @interface GHOST_IOSViewController : UIViewController
  
  - (nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)mtkView
-@@ -1295,6 +1341,7 @@
+@@ -1295,6 +1341,14 @@
    [_renderer mtkView:_view drawableSizeWillChange:_view.drawableSize];
  
    _view.delegate = _renderer;
 +  ghost_ios_log_metal_redraw_request(@"view_configured", _view);
++  /* Rejected demand-driven mode. drawInMTKView owns WM_main_loop_body, so these settings
++   * starve Blender input and are intentionally NOT active:
++   * _view.enableSetNeedsDisplay = YES;
++   * _view.paused = YES;
++   * updateLink.requiresContinuousUpdates = NO;
++   * ghost_ios_log_metal_redraw_request(@"blender_request", m_metalView);
++   */
    [self synchronizeViewGeometry];
  }
  
-@@ -2014,8 +2061,9 @@
+@@ -2014,8 +2068,9 @@
      [rootWindow layoutIfNeeded];
    }
    setNativePixelSize();

@@ -1,11 +1,12 @@
 diff --git a/intern/ghost/intern/GHOST_SystemIOS.mm b/intern/ghost/intern/GHOST_SystemIOS.mm
 --- a/intern/ghost/intern/GHOST_SystemIOS.mm
 +++ b/intern/ghost/intern/GHOST_SystemIOS.mm
-@@ -250,6 +250,54 @@
+@@ -250,6 +250,55 @@
  
  @end
  
 +static NSObject *s_metalRedrawLogLock = [[NSObject alloc] init];
++static uint64_t s_metalRedrawFrameCounter = 0;
 +
 +static NSURL *ghost_ios_metal_redraw_log_url()
 +{
@@ -56,20 +57,26 @@ diff --git a/intern/ghost/intern/GHOST_SystemIOS.mm b/intern/ghost/intern/GHOST_
  @implementation GHOST_IOSMetalRenderer
  {
    id<MTLDevice> _device;
-@@ -275,6 +323,7 @@
+@@ -275,6 +324,11 @@
  
  - (void)drawInMTKView:(nonnull MTKView *)MTKView
  {
-+  ghost_ios_log_metal_redraw(@"draw_enter", MTKView);
++  const uint64_t redrawFrame = ++s_metalRedrawFrameCounter;
++  const bool traceRedrawFrame = redrawFrame <= 3 || (redrawFrame % 120) == 0;
++  if (traceRedrawFrame) {
++    ghost_ios_log_metal_redraw(@"draw_enter", MTKView);
++  }
    GHOST_SystemIOS *system = static_cast<GHOST_SystemIOS *>(GHOST_ISystem::getSystem());
  
    /* We should always have a window... */
-@@ -315,6 +364,8 @@
+@@ -315,6 +369,10 @@
      system->next_active_window->makeKeyWindow();
      system->next_active_window = nullptr;
    }
 +
-+  ghost_ios_log_metal_redraw(@"draw_exit", MTKView);
++  if (traceRedrawFrame) {
++    ghost_ios_log_metal_redraw(@"draw_exit", MTKView);
++  }
  }
  
  - (void)mtkView:(nonnull MTKView *)view drawableSizeWillChange:(CGSize)size
@@ -129,33 +136,7 @@ diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_
  @interface GHOST_IOSViewController : UIViewController
  
  - (nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)mtkView
-@@ -1260,10 +1306,10 @@
-   _view = (MTKView *)self.view;
-   _view.multipleTouchEnabled = YES;
-   _view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
--  _view.enableSetNeedsDisplay = NO;
-+  _view.enableSetNeedsDisplay = YES;
-   _view.device = MTLCreateSystemDefaultDevice();
-   _view.clearColor = MTLClearColorMake(0, 0, 0, 1.0);
--  _view.paused = NO;
-+  _view.paused = YES;
-   _view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-   _view.autoResizeDrawable = YES;
-   _view.contentMode = UIViewContentModeScaleToFill;
-@@ -1277,9 +1323,10 @@
-   if (displayScale > 0) {
-     _view.contentScaleFactor = displayScale;
-   }
--  /* Use UIUpdateLink for proper ProMotion frame pacing (iOS 18+). */
-+  /* Observe UIKit-driven updates without asking UIKit to manufacture a continuous frame clock.
-+   * Blender's own redraw requests invalidate the paused MTKView explicitly. */
-   UIUpdateLink *updateLink = [UIUpdateLink updateLinkForView:_view actionTarget:self selector:@selector(updateLinkDidFire:)];
--  updateLink.requiresContinuousUpdates = YES;
-+  updateLink.requiresContinuousUpdates = NO;
-   [updateLink setEnabled:YES];
-   _renderer = [[GHOST_IOSMetalRenderer alloc] initWithMetalKitView:_view];
-   if (!_renderer) {
-@@ -1295,6 +1342,7 @@
+@@ -1295,6 +1341,7 @@
    [_renderer mtkView:_view drawableSizeWillChange:_view.drawableSize];
  
    _view.delegate = _renderer;
@@ -163,38 +144,13 @@ diff --git a/intern/ghost/intern/GHOST_WindowIOS.mm b/intern/ghost/intern/GHOST_
    [self synchronizeViewGeometry];
  }
  
-@@ -1380,7 +1428,8 @@
- 
- - (void)updateLinkDidFire:(UIUpdateLink *)link
- {
--  /* UIUpdateLink callback — triggers MTKView redraw at optimal frame rate. */
-+  /* A real UIKit update gets one Blender tick. The link itself is not continuous. */
-+  ghost_ios_log_metal_redraw_request(@"ui_update_request", _view);
-   [_view setNeedsDisplay];
- }
- 
-@@ -1560,7 +1609,8 @@
- 
- void GHOST_WindowIOS::needsDisplayUpdate()
- {
--  [m_uiview setNeedsDisplay];
-+  ghost_ios_log_metal_redraw_request(@"blender_request", m_metalView);
-+  [m_metalView setNeedsDisplay];
- }
- 
- void GHOST_WindowIOS::getWindowBounds(GHOST_Rect &bounds) const
-@@ -2014,8 +2064,12 @@
+@@ -2014,8 +2061,9 @@
      [rootWindow layoutIfNeeded];
    }
    setNativePixelSize();
--  /* Enable the drawInMTKView() calls for this window. */
--  m_metalView.paused = NO;
-+  /* Keep MetalKit's internal timer stopped. Prime one frame after the UIKit window is live;
-+   * subsequent frames are requested by Blender or by a real UIKit update. */
-+  m_metalView.paused = YES;
-+  m_metalView.enableSetNeedsDisplay = YES;
-+  ghost_ios_log_metal_redraw_request(@"initial_request", m_metalView);
-+  [m_metalView setNeedsDisplay];
+   /* Enable the drawInMTKView() calls for this window. */
+   m_metalView.paused = NO;
++  ghost_ios_log_metal_redraw_request(@"mainloop_started", m_metalView);
  
    IOS_WINDOW_LOG(@"Key Window: (ui_View)%p (mtkView)%p con(%p) (win=%p)",
                   m_uiview,

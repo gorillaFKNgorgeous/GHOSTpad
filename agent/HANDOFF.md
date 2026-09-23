@@ -1,7 +1,6 @@
 # GhostBlender live MCP — resume here
 
-Updated 2026-09-09. **Build 86 is green and the native bridge is now verified on the
-physical iPad. End-to-end relay/ChatGPT connection remains unverified.** Do not
+Updated 2026-09-23. **The bridge source is fully tracked in this repository, and the native iPad side has been verified on-device. The cloud deployment is only the running relay host, not the canonical source location.** Do not
 restart this work or restore the old MCP prototype. Read this file and
 `agent/README.md`, then continue from relay deployment/pairing.
 
@@ -30,6 +29,18 @@ necessary; the intended steady state has no manual code/log transfer.
 - The Apple/Siri attachment is background, not verified implementation authority.
   No second Python interpreter, PyEval_InitThreads, speculative FoundationModels
   APIs or assumed unlimited background execution have been introduced.
+
+## Where the bridge lives
+
+The bridge is source-controlled in this repository. Cloud Console / GCE is only a deployment target for the relay process and its private runtime configuration. Rebuilding or moving the relay should start from the files in `agent/relay/`; do not treat the live VM/container as the source of truth.
+
+The bridge is split into three layers:
+
+- **iPad native transport:** `agent/native/ghostbridge_transport.mm`, compiled into the Blender/iPad build.
+- **Blender runtime:** `agent/runtime/`, loaded inside Blender and responsible for scene inspection, Python execution, captures, diagnostics, job state and the Agent Connection UI.
+- **Remote relay / MCP service:** `agent/relay/`, containing the HTTP/MCP server, OAuth, durable job store, Docker files and GCE deployment helper.
+
+Build integration is also in-repo through `scripts/apply-ios-agent-bridge.py`, `scripts/prepare-source.sh`, `scripts/package-ipa.sh` and `.github/workflows/agent-checks.yml` / the main IPA workflow. Secrets and generated `.env` files are intentionally not committed.
 
 ## Implemented files
 

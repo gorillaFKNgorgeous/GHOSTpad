@@ -15,6 +15,16 @@ This repository contains the workflows, dependency bootstrap, packaging scripts,
 
 ## Live agent connection implementation
 
+The bridge source is **in this repository**, not only in the cloud deployment. The cloud host runs the relay service and keeps private runtime configuration/secrets, while GitHub remains the source of truth.
+
+The bridge is split across:
+- `agent/native/ghostbridge_transport.mm` — native iPad HTTPS transport compiled into Blender.
+- `agent/runtime/` — Blender-side runtime, Agent Connection UI, scene inspection, Python execution, captures, diagnostics and job state.
+- `agent/relay/` — MCP/HTTP relay, OAuth, durable store, Docker deployment files and GCE deployment helper.
+- `scripts/apply-ios-agent-bridge.py`, `scripts/prepare-source.sh`, `scripts/package-ipa.sh` and the agent/build workflows — build and packaging integration.
+
+Generated credentials and private `.env` values are intentionally **not** committed. Rebuilding or moving the cloud relay should be done from the repository files rather than by copying code out of Cloud Console.
+
 A new [live MCP bridge](agent/README.md) is implemented against this 5.2 baseline.
 It includes native outbound HTTPS networking, a main-thread Python dispatcher,
 scene inspection, code execution, capture, diagnostics and persistent scripts,

@@ -1,6 +1,6 @@
 # Blender iPad project status
 
-Updated: **8 September 2026**, for the live MCP bridge implementation.
+Updated: **23 September 2026**, including the working GhostBlender Simple bridge.
 
 ## Canonical-source migration — 12 September 2026
 
@@ -12,16 +12,13 @@ workflow remains unchanged so the working reconstruction path is not broken. See
 [GHOSTBLENDER_SOURCE_AUDIT.md](GHOSTBLENDER_SOURCE_AUDIT.md). Do not claim that CI builds
 checked-in Blender source until the import and equivalence checks are complete.
 
-## Live MCP bridge — 8 September 2026
+## Live MCP bridge — current status 23 September 2026
 
-New native transport, main-thread runtime tools, durable relay jobs, OAuth,
-client tests and build integration have been implemented. The first independent
-agent check run passed both iOS SDK syntax compilation and official MCP-client
-interoperability: https://github.com/gorillaFKNgorgeous/-blender-ipad-M4/actions/runs/34223282161.
-The live device milestone remains incomplete until a new IPA is installed, the
-relay is hosted with persistent storage, and pairing/acceptance succeeds.
-See [agent/HANDOFF.md](agent/HANDOFF.md) for current continuation instructions.
-This does not resolve the Scene partial-write crash described below.
+The bridge-enabled IPA is installed on the physical iPad, a persistent relay is deployed and paired, and **end-to-end ChatGPT control of Blender is working in development through GhostBlender Simple**. It is being used for live scene inspection and remote Blender operations.
+
+GhostBlender Simple is the private-development mode in `agent/relay/simple_server.py`. It uses the same native transport, Blender runtime and durable relay machinery, keeps `DEVICE_TOKEN` authentication for the iPad relay exchange, but uses a Caddy-protected capability URL instead of interactive OAuth on the ChatGPT-facing MCP endpoint. It is intentionally not the production/multi-user security model.
+
+The stronger OAuth-capable implementation remains in `agent/relay/server.py` and `agent/relay/oauth.py` and has CI coverage. Live end-to-end acceptance of that full OAuth deployment remains a security-hardening milestone. See [agent/HANDOFF.md](agent/HANDOFF.md).
 
 ## Build #83 correction and Scene partial-write investigation
 

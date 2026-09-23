@@ -1,8 +1,6 @@
 # GhostBlender live MCP — resume here
 
-Updated 2026-09-23. **The bridge source is fully tracked in this repository, and the native iPad side has been verified on-device. The cloud deployment is only the running relay host, not the canonical source location.** Do not
-restart this work or restore the old MCP prototype. Read this file and
-`agent/README.md`, then continue from relay deployment/pairing.
+Updated 2026-09-23. **The bridge source is fully tracked in this repository and end-to-end remote Blender control on the physical iPad is working in development through the private single-owner GhostBlender Simple deployment.** The cloud deployment is the running relay host and private configuration, not the canonical source location. Do not restart this work or restore the old MCP prototype.
 
 ## Goal and project constraints
 
@@ -103,36 +101,25 @@ Build integration is also in-repo through `scripts/apply-ios-agent-bridge.py`, `
   scripts directory, including the new startup package.
 - Python compilation, shell syntax and git diff whitespace checks passed.
 
-These checks now prove the native module and startup UI load on a physical device.
-They still do not prove live relay connectivity, remote scene execution/capture,
-network foreground transitions or a completed ChatGPT OAuth/MCP round trip.
+These checks prove the native module and startup UI load on a physical device. Subsequent development use also proves live relay connectivity and end-to-end ChatGPT MCP control of the running iPad Blender instance through **GhostBlender Simple**, including remote scene inspection and Blender operations. This is the current working development path.
 
-## Required next actions
+That success is not completion of the full OAuth security design. `agent/relay/simple_server.py` deliberately removes per-tool OAuth requirements on the ChatGPT-facing MCP endpoint after Caddy's capability URL has gated access. The iPad-to-relay `/device/exchange` path still uses the device credential. The full OAuth-capable relay remains in `server.py` / `oauth.py` and has CI coverage, but production-style end-to-end OAuth acceptance has not yet been recorded.
 
-- [x] Preserve implementation directly on main and keep this handoff current.
-- [x] Implement device runtime, authenticated relay and deployment configuration.
-- [x] Validate protocol, journal and source-transform logic.
-- [x] Pass initial iOS SDK syntax and independent official MCP-client CI checks.
-- [x] Pass full integration IPA build 86.
-- [x] Install build 86 on the physical iPad and verify native bridge load/status.
-- [ ] Create/select a Google Cloud project (or another persistent HTTPS host) and
-      deploy the single-process relay with durable storage. Do not run the current
-      SQLite relay on ephemeral Cloud Run/Functions storage or multiple replicas.
-- [ ] Generate distinct credentials using `configure.py`; verify `/health` and
-      endpoint authentication before pairing the iPad.
-- [ ] Pair via GhostBlender → Agent Connection and confirm `Connected` state.
-- [ ] Create/authorize the ChatGPT developer app for `/mcp` using static OAuth
-      credentials. Add the exact callback shown by ChatGPT to the relay allowlist.
-- [ ] Execute the acceptance sequence in agent/README.md: status → inspect → edit →
-      capture → refine, scripts, error diagnostics, scene switch, network
-      drop/reconnect, app reopen, suspension and normal Files behavior. Record evidence.
+## Current bridge status and next actions
 
-The currently running ChatGPT session has no GhostBlender MCP tool registered.
-Do not claim live remote access, successful remote images or background autonomy
-until those are observed. The bridge can persist, but active model work still
-follows client run/usage/approval limits. iPadOS can suspend an inactive app.
-Native Blender calls cannot be forcibly cancelled; a failed/uncertain edit may
-have changed the scene and must be inspected before retry.
+- [x] Native iPad transport, Blender main-thread runtime, durable relay jobs and full OAuth-capable relay code implemented.
+- [x] Bridge-enabled IPA installed on the physical iPad.
+- [x] Persistent cloud relay deployed and paired.
+- [x] Live ChatGPT-to-iPad Blender control established using **GhostBlender Simple** and used for real development.
+- [ ] Keep Simple as the private development bridge while active development benefits from its lower setup friction.
+- [ ] Before broader/public/multi-user use, move the ChatGPT-facing side to the full authenticated OAuth path and run end-to-end OAuth acceptance.
+- [ ] Expand regression evidence for reconnect, suspension/resume, crash recovery, capture, stale-job handling and normal Files behavior.
+
+### Authentication modes
+
+**GhostBlender Simple (current working development deployment):** `agent/relay/simple_server.py` reuses the normal relay implementation but removes the interactive OAuth requirement from ChatGPT-facing MCP calls. Caddy exposes an unguessable capability URL as the access gate. Device authentication is not removed: `/device/exchange` still requires `DEVICE_TOKEN`. This is suitable for the owner's private development environment, but intentionally is not a multi-user or production authentication design.
+
+**Full relay (implemented security-hardening path):** `agent/relay/server.py` and `agent/relay/oauth.py` retain OAuth, PKCE and token handling. CI has tested this implementation, but the current day-to-day live bridge is Simple. Do not claim the full OAuth path is deployed/proven until its live acceptance sequence has been recorded.
 
 ## Relevant current documentation
 
@@ -156,4 +143,5 @@ have changed the scene and must be inspected before retry.
   Actions run `34229150516`.
 - Physical-device verification, 2026-09-09: Agent Connection UI present;
   `_ghostbridge_transport.status()` succeeded with foreground state and real memory
-  telemetry. End-to-end MCP relay/ChatGPT pairing remains the next milestone.
+  telemetry.
+- Subsequent development milestone: persistent relay deployed and paired; **GhostBlender Simple** is working end-to-end from ChatGPT to the running iPad Blender instance. Full OAuth deployment remains a later security-hardening milestone.

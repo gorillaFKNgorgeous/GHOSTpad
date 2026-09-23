@@ -28,9 +28,9 @@ Generated credentials and private `.env` values are intentionally **not** commit
 A new [live MCP bridge](agent/README.md) is implemented against this 5.2 baseline.
 It includes native outbound HTTPS networking, a main-thread Python dispatcher,
 scene inspection, code execution, capture, diagnostics and persistent scripts,
-plus an authenticated relay. **A live iPad connection is not yet verified.**
-See the [resumable checklist](agent/HANDOFF.md) for validation, IPA build status,
-relay deployment and one-time pairing. The rejected earlier prototype remains
+plus a durable relay. **End-to-end remote control of the physical iPad is now working in development through the private single-owner GhostBlender Simple deployment.** The Simple mode uses the same native iPad transport and Blender runtime as the full bridge, but uses a Caddy-protected capability URL instead of interactive OAuth on the ChatGPT-facing MCP endpoint. Device-to-relay pairing remains authenticated with `DEVICE_TOKEN`.
+
+The stronger OAuth-capable relay remains implemented in `agent/relay/server.py` and `agent/relay/oauth.py`; live acceptance of that path is a future security-hardening milestone. See the [resumable checklist](agent/HANDOFF.md) for the exact distinction and current status. The rejected earlier prototype remains
 excluded. Siri and the offline assistant remain future work.
 
 ## Current project state

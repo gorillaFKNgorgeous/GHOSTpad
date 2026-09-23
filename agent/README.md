@@ -1,5 +1,8 @@
 # GhostBlender live agent bridge
 
+> **Current status — 23 September 2026:** End-to-end remote control of the physical iPad Blender build is working in private development through **GhostBlender Simple**. Simple uses the normal native transport, Blender runtime and durable relay, while replacing interactive OAuth on the ChatGPT-facing MCP endpoint with a Caddy-protected capability URL. iPad-to-relay device authentication remains enabled. The full OAuth-capable relay code is retained and tested in this repository, but it is not the currently proven day-to-day deployment. See [HANDOFF.md](HANDOFF.md).
+
+
 Implementation milestone, 8 September 2026. **The live iPad connection has not yet
 been demonstrated.** The native code and protocol checks pass; a new signed IPA,
 a deployed relay, and one-time client/device pairing are still required.

@@ -103,8 +103,10 @@ fi
 echo "Packaging app bundle: $app_path"
 agent_startup="$(find "$app_path/Assets" -type f -path '*/scripts/startup/ghostbridge/__init__.py' -print -quit)"
 agent_core="$(find "$app_path/Assets" -type f -path '*/scripts/startup/ghostbridge/core.py' -print -quit)"
+agent_insight="$(find "$app_path/Assets" -type f -path '*/scripts/startup/ghostbridge/insight.py' -print -quit)"
 require_nonempty "$agent_startup" "GhostBlender agent startup module"
 require_nonempty "$agent_core" "GhostBlender agent runtime tools"
+require_nonempty "$agent_insight" "GhostBlender embedded companion UI"
 
 plist="$app_path/Info.plist"
 executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")"

@@ -17,6 +17,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - run: >-
+          python -m py_compile
+          agent/relay/server.py agent/relay/simple_server.py agent/relay/store.py
+          agent/relay/chat.py agent/relay/chat_login.py
+          agent/runtime/__init__.py agent/runtime/core.py agent/runtime/insight.py
       - run: python -m unittest discover -s agent/tests -v
       - run: python -m pip install 'mcp==1.26.0'
       - run: python agent/tests/sdk_smoke.py

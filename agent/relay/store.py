@@ -77,6 +77,10 @@ class Store:
                     'error',
                     'Previous AI turn was interrupted and was not replayed automatically.',
                 )
+                self.db.execute(
+                    'DELETE FROM chat_state WHERE device_id=?',
+                    (row['device_id'],),
+                )
 
     def _expire(self, device_id):
         now = time.time()

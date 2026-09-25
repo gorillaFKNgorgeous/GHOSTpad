@@ -131,6 +131,38 @@ That success is not completion of the full OAuth security design. `agent/relay/s
 
 ## Current bridge status and next actions
 
+### Embedded conversation checkpoint — 25 September 2026
+
+The in-Blender conversation path is implemented on `main` and its bridge checks
+are green at commit `dfda0b8a555ecd9ba3ecb413a9c84266c41b6268` (Actions run
+`36139469748`). The implementation deliberately reuses the authenticated
+`/device/exchange` heartbeat rather than adding a second iPad poller.
+
+- `agent/runtime/insight.py` provides the Conversation and Workspace Insight UI.
+  It sends one pending message at a time, consumes cursor-based status/final/error
+  events, and is copied into future IPAs by the existing runtime copy transform.
+- The currently installed iPad can test this before a rebuild through the matching
+  persistent `ghostblender_insight.py` prototype already loaded in development.
+- `agent/relay/store.py` durably journals chat messages/events and makes message
+  delivery idempotent. A relay restart marks an in-flight model turn uncertain
+  and never silently replays it because Blender may already have changed.
+- `agent/relay/chat.py` runs one serialized Codex thread, persists its thread ID,
+  and gives Codex the existing local GhostBlender MCP tools for live inspection,
+  edits and captures.
+- The relay image includes the pinned `openai-codex` Python SDK and
+  `chat_login.py` for one-time ChatGPT device-code sign-in. Codex auth lives
+  under the existing persistent `/data` volume; no OpenAI API key is required
+  for this development path.
+- `deploy-gce.sh` now deploys from canonical `GHOSTpad` rather than the obsolete
+  repository and safely updates an existing VM checkout's origin.
+
+**Not yet accepted live:** deploy current `main` to the existing GCE relay, run
+`python chat_login.py` inside the relay container, then send a message from the
+Blender Conversation panel and verify a model reply plus a small inspected edit.
+Do not start another IPA build before this relay-side acceptance test; the current
+prototype already speaks the new protocol.
+
+
 - [x] Native iPad transport, Blender main-thread runtime, durable relay jobs and full OAuth-capable relay code implemented.
 - [x] Bridge-enabled IPA installed on the physical iPad.
 - [x] Persistent cloud relay deployed and paired.

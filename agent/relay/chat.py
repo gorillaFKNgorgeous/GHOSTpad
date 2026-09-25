@@ -35,6 +35,9 @@ web_search = "disabled"
 url = "{mcp_url}"
 required = true
 default_tools_approval_mode = "approve"
+
+[projects."/tmp/ghostblender-chat"]
+trust_level = "trusted"
 '''
     config_path = codex_home / "config.toml"
     if not config_path.exists() or config_path.read_text() != config:
@@ -168,6 +171,14 @@ class ChatWorker:
             try:
                 final = self._run_turn(message["text"])
             except RuntimeError as exc:
+                message = str(exc).replace("\n", " ")[:240]
+                print(
+                    "ghostblender_chat_runtime_error="
+                    + type(exc).__name__
+                    + ":"
+                    + message,
+                    flush=True,
+                )
                 self._close_codex()
                 if str(exc) == "codex_not_signed_in":
                     text = "AI sign-in required on the relay before embedded chat can run."

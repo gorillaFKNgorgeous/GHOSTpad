@@ -1,3 +1,4 @@
+import os
 import base64
 import hashlib
 import http.client
@@ -154,6 +155,101 @@ class StoreTests(unittest.TestCase):
         self.store.chat_set_thread_id('ipad',None)
         self.assertIsNone(self.store.chat_thread_id('ipad'))
         self.assertTrue(hasattr(chat_backend,'ChatWorker'))
+
+
+class ChatWorkerTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = str(Path(self.temp.name) / 'state.sqlite')
+        self.store = Store(self.path)
+        self.store.exchange('ipad', heartbeat())
+        self.old_codex_home = os.environ.get('CODEX_HOME')
+        os.environ['CODEX_HOME'] = str(Path(self.temp.name) / 'codex')
+
+    def tearDown(self):
+        if self.old_codex_home is None:
+            os.environ.pop('CODEX_HOME', None)
+        else:
+            os.environ['CODEX_HOME'] = self.old_codex_home
+        self.store.db.close()
+        self.temp.cleanup()
+
+    def test_worker_runs_message_once_and_persists_thread(self):
+        runs = []
+        starts = []
+        closes = []
+
+        class FakeThread:
+            id = 'thr_embedded_test'
+
+            def run(self, text, **kwargs):
+                runs.append((text, kwargs))
+                return types.SimpleNamespace(final_response='Cube moved and verified.')
+
+        class FakeCodex:
+            def account(self):
+                return types.SimpleNamespace(account=types.SimpleNamespace(type='chatgpt'))
+
+            def thread_start(self, **kwargs):
+                starts.append(kwargs)
+                return FakeThread()
+
+            def thread_resume(self, thread_id, **kwargs):
+                self.assert_never_called = thread_id
+                raise AssertionError('new store must not resume before a thread is persisted')
+
+            def close(self):
+                closes.append(True)
+
+        fake_module = types.ModuleType('openai_codex')
+        fake_module.ApprovalMode = types.SimpleNamespace(deny_all='deny_all')
+        fake_module.Sandbox = types.SimpleNamespace(read_only='read_only')
+        fake_module.Codex = FakeCodex
+
+        old_module = sys.modules.get('openai_codex')
+        sys.modules['openai_codex'] = fake_module
+        worker = None
+        try:
+            message = {'id':'e'*32, 'text':'Move the cube up and check it'}
+            self.store.chat_exchange('ipad', {'cursor':0, 'messages':[message]})
+            worker = chat_backend.ChatWorker(
+                self.store, 'ipad', 'http://127.0.0.1:8080/mcp', poll_interval=0.01
+            )
+            worker.start()
+            deadline = time.time() + 2
+            reply = None
+            while time.time() < deadline:
+                reply = self.store.chat_exchange('ipad', {'cursor':0, 'messages':[]})
+                if any(event['type'] == 'final' for event in reply['events']):
+                    break
+                time.sleep(0.01)
+            self.assertIsNotNone(reply)
+            finals = [event for event in reply['events'] if event['type'] == 'final']
+            self.assertEqual([event['text'] for event in finals], ['Cube moved and verified.'])
+            self.assertEqual([run[0] for run in runs], [message['text']])
+            self.assertEqual(self.store.chat_thread_id('ipad'), 'thr_embedded_test')
+            self.assertEqual(len(starts), 1)
+            self.assertEqual(starts[0]['approval_mode'], 'deny_all')
+            self.assertEqual(starts[0]['sandbox'], 'read_only')
+
+            # Re-delivery of the same iPad message is acknowledged but never
+            # creates a second Codex turn.
+            self.store.chat_exchange('ipad', {'cursor':reply['cursor'], 'messages':[message]})
+            time.sleep(0.05)
+            self.assertEqual(len(runs), 1)
+        finally:
+            if worker is not None:
+                worker.close()
+            if old_module is None:
+                sys.modules.pop('openai_codex', None)
+            else:
+                sys.modules['openai_codex'] = old_module
+
+    def test_relay_container_includes_embedded_chat_runtime(self):
+        dockerfile = (ROOT / 'agent/relay/Dockerfile').read_text()
+        self.assertIn('chat.py chat_login.py', dockerfile)
+        self.assertRegex(dockerfile, r"openai-codex==\d+\.\d+\.\d+")
+
 
 
 class RuntimeTests(unittest.TestCase):

@@ -10,7 +10,9 @@ import uuid
 
 OPERATIONS = {'inspect_scene', 'execute_python', 'capture', 'diagnostics',
               'list_scripts', 'read_script', 'write_script'}
-KEY = re.compile(r'^[a-zA-Z0-9_-]{8,80}
+KEY = re.compile(r'^[a-zA-Z0-9_-]{8,80}$')
+CHAT_KEY = re.compile(r'^[a-f0-9]{32}$')
+
 
 class Store:
     def __init__(self, path):

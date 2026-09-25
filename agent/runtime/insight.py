@@ -103,8 +103,8 @@ def apply_chat(chat):
     cursor = chat.get("cursor", _CHAT_CURSOR)
     if type(cursor) is int:
         _CHAT_CURSOR = max(_CHAT_CURSOR, cursor)
-    if _CHAT_STATUS == "Waiting for chat relay":
-        _CHAT_STATUS = "Relay ready; AI sign-in may be required"
+    if _CHAT_STATUS in {"Waiting for chat relay", "Chat service unavailable on relay"}:
+        _CHAT_STATUS = "Ready"
     _redraw()
 
 

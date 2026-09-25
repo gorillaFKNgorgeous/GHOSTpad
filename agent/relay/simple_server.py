@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 import server
+from chat import ChatWorker
 
 
 # Developer-mode apps configured as "No Authentication" must not advertise an
@@ -42,6 +43,7 @@ if __name__ == '__main__':
     os.umask(0o077)
     db_path = os.environ.get('DATABASE_PATH', '/data/ghostblender.sqlite3')
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    port = int(os.environ.get('PORT', '8080'))
     app = server.App(
         db_path,
         os.environ['PUBLIC_ORIGIN'],
@@ -53,7 +55,18 @@ if __name__ == '__main__':
         os.environ['OWNER_KEY'],
         json.loads(os.environ['OAUTH_REDIRECT_URIS']),
     )
-    server.Server(
-        (os.environ.get('BIND_HOST', '127.0.0.1'), int(os.environ.get('PORT', '8080'))),
+    httpd = server.Server(
+        (os.environ.get('BIND_HOST', '127.0.0.1'), port),
         app,
-    ).serve_forever()
+    )
+    app.chat = ChatWorker(
+        app.store,
+        app.device_id,
+        f'http://127.0.0.1:{port}/mcp',
+    )
+    app.chat.start()
+    try:
+        httpd.serve_forever()
+    finally:
+        app.chat.close()
+        httpd.server_close()

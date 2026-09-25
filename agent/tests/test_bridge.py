@@ -129,9 +129,11 @@ class StoreTests(unittest.TestCase):
     def test_chat_restart_never_replays_running_turn(self):
         message={'id':'b'*32,'text':'Inspect the scene'}
         self.store.chat_exchange('ipad',{'cursor':0,'messages':[message]})
+        self.store.chat_set_thread_id('ipad','thr_incomplete')
         self.assertEqual(self.store.chat_claim('ipad')['id'],message['id'])
         self.store.db.close()
         self.store=Store(self.path)
+        self.assertIsNone(self.store.chat_thread_id('ipad'))
         row=self.store.db.execute(
             'SELECT state FROM chat_messages WHERE device_id=? AND message_id=?',
             ('ipad',message['id']),

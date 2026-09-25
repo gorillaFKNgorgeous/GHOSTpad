@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / 'agent/relay'))
 from server import App, Server
 from store import Store
 from oauth import OAuth, digest
+import chat as chat_backend
 spec = importlib.util.spec_from_file_location('bridge_core', ROOT / 'agent/runtime/core.py')
 core = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(core)
@@ -99,6 +100,60 @@ class StoreTests(unittest.TestCase):
         completion={'job_id':job['job_id'],'boot_id':'boot_one','result':{'ok':True,'value':1}}
         self.store.exchange('ipad',heartbeat(),completion)
         self.assertEqual(self.store.result('ipad',job['job_id'])['state'],'completed')
+
+    def test_chat_delivery_is_idempotent_and_cursor_driven(self):
+        message={'id':'a'*32,'text':'Move the cube up'}
+        first=self.store.chat_exchange('ipad',{'cursor':0,'messages':[message]})
+        second=self.store.chat_exchange('ipad',{'cursor':0,'messages':[message]})
+        self.assertEqual(first['ack_ids'],[message['id']])
+        self.assertEqual(second['ack_ids'],[message['id']])
+        count=self.store.db.execute(
+            'SELECT count(*) FROM chat_messages WHERE device_id=?',('ipad',)
+        ).fetchone()[0]
+        self.assertEqual(count,1)
+
+        claimed=self.store.chat_claim('ipad')
+        self.assertEqual(claimed,message)
+        self.assertIsNone(self.store.chat_claim('ipad'))
+        self.store.chat_event('ipad',message['id'],'status','AI working')
+        self.store.chat_complete('ipad',message['id'],'Done')
+        replay=self.store.chat_exchange('ipad',{'cursor':0,'messages':[]})
+        self.assertEqual([event['type'] for event in replay['events']],['status','final'])
+        self.assertEqual(replay['events'][-1]['text'],'Done')
+        caught_up=self.store.chat_exchange(
+            'ipad',{'cursor':replay['cursor'],'messages':[]}
+        )
+        self.assertEqual(caught_up['events'],[])
+
+    def test_chat_restart_never_replays_running_turn(self):
+        message={'id':'b'*32,'text':'Inspect the scene'}
+        self.store.chat_exchange('ipad',{'cursor':0,'messages':[message]})
+        self.assertEqual(self.store.chat_claim('ipad')['id'],message['id'])
+        self.store.db.close()
+        self.store=Store(self.path)
+        row=self.store.db.execute(
+            'SELECT state FROM chat_messages WHERE device_id=? AND message_id=?',
+            ('ipad',message['id']),
+        ).fetchone()
+        self.assertEqual(row['state'],'uncertain')
+        replay=self.store.chat_exchange('ipad',{'cursor':0,'messages':[]})
+        self.assertEqual(replay['events'][-1]['type'],'error')
+        self.assertIn('not replayed',replay['events'][-1]['text'])
+
+    def test_chat_message_id_conflict_and_thread_state(self):
+        message_id='c'*32
+        self.store.chat_exchange(
+            'ipad',{'cursor':0,'messages':[{'id':message_id,'text':'one'}]}
+        )
+        with self.assertRaisesRegex(ValueError,'reused'):
+            self.store.chat_exchange(
+                'ipad',{'cursor':0,'messages':[{'id':message_id,'text':'two'}]}
+            )
+        self.store.chat_set_thread_id('ipad','thr_test')
+        self.assertEqual(self.store.chat_thread_id('ipad'),'thr_test')
+        self.store.chat_set_thread_id('ipad',None)
+        self.assertIsNone(self.store.chat_thread_id('ipad'))
+        self.assertTrue(hasattr(chat_backend,'ChatWorker'))
 
 
 class RuntimeTests(unittest.TestCase):
@@ -210,6 +265,14 @@ class HttpAndOAuthTests(unittest.TestCase):
         rpc={'jsonrpc':'2.0','id':2,'method':'tools/call','params':{'name':'job_result','arguments':{'job_id':value['job_id']}}}
         status,reply,_=self.request('/mcp',rpc,token='a'*40)
         self.assertEqual(status,200); self.assertFalse(reply['result']['isError'])
+
+    def test_device_exchange_carries_chat_only_when_backend_is_enabled(self):
+        self.app.chat=object()
+        payload={'protocol':1,'device_id':'ipad','heartbeat':heartbeat(),
+                 'chat':{'cursor':0,'messages':[{'id':'d'*32,'text':'hello'}]}}
+        status,reply,_=self.request('/device/exchange',payload,token='d'*40)
+        self.assertEqual(status,200)
+        self.assertEqual(reply['chat']['ack_ids'],['d'*32])
 
     def test_capture_is_returned_as_mcp_image(self):
         self.app.store.exchange('ipad',heartbeat())

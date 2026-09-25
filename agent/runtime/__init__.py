@@ -10,6 +10,7 @@ import bpy
 from bpy.app.handlers import persistent
 from bpy.props import PointerProperty, StringProperty
 from .core import Runtime, atomic_json
+from . import insight
 
 try:
     import _ghostbridge_transport as native
@@ -83,6 +84,7 @@ def _tick():
             data = json.loads(response['body'])
             if data.get('protocol') != 1:
                 raise RuntimeError('incompatible_relay')
+            insight.apply_chat(data.get('chat'))
             if data.get('ack'):
                 _runtime.acknowledge(data['ack'])
             _status = 'Connected'
@@ -95,7 +97,8 @@ def _tick():
             _next_request = time.monotonic() + (0.05 if _runtime.outbox else 1.0)
         if not _waiting and time.monotonic() >= _next_request:
             body = {'protocol': 1, 'device_id': _config['device_id'],
-                    'heartbeat': _runtime.heartbeat(), 'completed': _runtime.outbox}
+                    'heartbeat': _runtime.heartbeat(), 'completed': _runtime.outbox,
+                    'chat': insight.chat_payload()}
             native.request(_config['relay_url'] + '/device/exchange', _config['device_token'],
                            json.dumps(body, separators=(',', ':'), allow_nan=False))
             _waiting = True
@@ -205,6 +208,7 @@ def register():
     for cls in _CLASSES:
         bpy.utils.register_class(cls)
     bpy.types.WindowManager.ghostbridge = PointerProperty(type=GBSettings)
+    insight.register()
     # WindowManager may not exist during early startup; fill the fields on the first tick.
     def fill_settings():
         wm = bpy.context.window_manager
@@ -229,6 +233,7 @@ def unregister():
         bpy.app.timers.unregister(_tick)
     if _load_post in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_load_post)
+    insight.unregister()
     del bpy.types.WindowManager.ghostbridge
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)

@@ -215,7 +215,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_request(self):
         app = self.server.app
-        if self.headers.get('Host') not in (app.host, 'localhost', '127.0.0.1'):
+        host_value = self.headers.get('Host', '')
+        local_host = urlsplit('//' + host_value).hostname
+        if host_value != app.host and local_host not in ('localhost', '127.0.0.1'):
             self.reply(421, {'error':'invalid_host'})
             return
         origin = self.headers.get('Origin')
@@ -263,7 +265,10 @@ class Handler(BaseHTTPRequestHandler):
             body = self.body()
             if body.get('protocol') != 1 or body.get('device_id') != app.device_id:
                 raise ValueError('invalid_device_or_protocol')
-            self.reply(200, app.store.exchange(app.device_id, body['heartbeat'], body.get('completed')))
+            reply = app.store.exchange(app.device_id, body['heartbeat'], body.get('completed'))
+            if getattr(app, 'chat', None) is not None and 'chat' in body:
+                reply['chat'] = app.store.chat_exchange(app.device_id, body['chat'])
+            self.reply(200, reply)
         elif path == '/mcp':
             if not self.authorized():
                 self.close_connection = True

@@ -1,6 +1,23 @@
 # GhostBlender live MCP — resume here
 
-Updated 2026-09-23. **The bridge source is fully tracked in this repository and end-to-end remote Blender control on the physical iPad is working in development through the private single-owner GhostBlender Simple deployment.** The cloud deployment is the running relay host and private configuration, not the canonical source location. Do not restart this work or restore the old MCP prototype.
+Updated 2026-09-25. **The bridge source is fully tracked in this repository and end-to-end remote Blender control on the physical iPad is working in development through the private single-owner GhostBlender Simple deployment.** The cloud deployment is the running relay host and private configuration, not the canonical source location. Do not restart this work or restore the old MCP prototype.
+
+## Embedded AI chat checkpoint — 25 September 2026
+
+The Higgsfield-inspired companion work from the live iPad session has now been recovered into source rather than left as an ephemeral agent script. The current physical iPad already has the prototype Conversation / Workspace Insight panel registered as `ghostblender_insight.py`; its visible blocker was correctly identified as **server-side chat support**, not Blender UI registration. The current relay returns no `chat` extension, so that prototype displays “Chat service unavailable on relay”.
+
+The repository now implements the missing last-mile architecture:
+
+- `agent/runtime/insight.py` is the bundled Conversation + Workspace Insight UI. In future builds it rides the existing GhostBlender heartbeat directly, so there is still exactly one native network poller.
+- The existing live prototype remains wire-compatible, so **the first end-to-end chat acceptance does not require another IPA**. Redeploying the relay is enough to test the Conversation panel already visible on the iPad.
+- `agent/relay/store.py` now journals chat messages and cursor-based events in SQLite. Message IDs are idempotent. A relay restart never replays a model turn that had started: it becomes `uncertain`, emits an error event and drops the possibly-partial Codex thread state.
+- `agent/relay/chat.py` adds one serial Codex worker using the user's existing Codex/ChatGPT account session. It reuses one Codex thread for continuity, uses the relay's own MCP endpoint at localhost for Blender tools, runs read-only / deny-escalation locally, and explicitly approves this owner's GhostBlender MCP tools.
+- `agent/relay/chat_login.py` provides the one-time device-code ChatGPT account sign-in. No OpenAI API key is required for this path.
+- The relay image pins `openai-codex==0.156.1`. The worker defaults to medium reasoning; `CODEX_MODEL` and `CODEX_REASONING_EFFORT` can be overridden privately in the relay environment later.
+- `agent/relay/deploy-gce.sh` now deploys from canonical `GHOSTpad` even when the VM checkout previously pointed at the old repository.
+- New relay tests cover chat idempotency, cursor delivery, interrupted-turn non-replay, thread reset and device-exchange transport. CI also syntax-checks the new chat/runtime modules.
+
+**Immediate remaining acceptance steps:** (1) redeploy the relay from current `main`; (2) run `sudo docker-compose exec relay python chat_login.py` once and complete the displayed device-code sign-in; (3) in the already-open iPad Conversation panel send a harmless request such as “inspect the scene and tell me the active object”; (4) verify the model uses GhostBlender MCP, the reply returns to the panel, and a second instruction can mutate then inspect the scene without duplicate execution. Only after that acceptance should a new IPA be built to prove the companion is permanently bundled rather than relying on the current persistent prototype script.
 
 ## Goal and project constraints
 
@@ -10,7 +27,7 @@ script creation/modification and autonomous iteration. The user supplies goals,
 not Blender operator names. One-time signed-app installation and pairing remain
 necessary; the intended steady state has no manual code/log transfer.
 
-- Repo: https://github.com/gorillaFKNgorgeous/-blender-ipad-M4
+- Repo: https://github.com/gorillaFKNgorgeous/GHOSTpad
 - Work on main only. No new branches or PRs. The obsolete MCP prototype is rejected.
 - Initial main: bb977ea0a16d0f09942ca04b5b59270042c46461.
 - Initial durable checklist: abca12cb5e2cb5342b401d71bc09e686bd9434b5.
@@ -46,15 +63,21 @@ Build integration is also in-repo through `scripts/apply-ios-agent-bridge.py`, `
   bounded response buffers, redirect rejection, no Python callbacks/background
   Python threads, app foreground and measured process memory status.
 - `agent/runtime/__init__.py`: startup registration, persistent main-thread timer,
-  one-time connection panel, saved pairing, reconnect/backoff/disconnect.
+  one-time connection panel, saved pairing, reconnect/backoff/disconnect, plus the
+  single heartbeat path used by the embedded chat extension.
+- `agent/runtime/insight.py`: embedded Conversation and Workspace Insight panels,
+  local scene/object/missing-asset reports and the durable chat cursor/pending-message UI.
 - `agent/runtime/core.py`: scene inspection, privileged Python with bounded stdout
   and cooperative Python deadline, screenshot/Render Result capture, app logs,
   persistent script workspace and durable command journal/outbox. Detects file
   loads and switches to a different active scene before executing stale commands.
-- `agent/relay/{server,store,oauth}.py`: dependency-free single-owner/single-process
-  MCP Streamable HTTP, SQLite jobs and OAuth state. Separate device/agent tokens,
-  static OAuth client, S256 PKCE, audience/issuer binding, expiration and rotating
-  refresh tokens. Correct tool annotations and MCP image content.
+- `agent/relay/{server,store,oauth}.py`: dependency-free relay core with
+  single-owner MCP Streamable HTTP, SQLite jobs/chat events and OAuth state.
+  Separate device/agent tokens, static OAuth client, S256 PKCE, audience/issuer
+  binding, expiration and rotating refresh tokens. Correct tool annotations and
+  MCP image content.
+- `agent/relay/{chat,chat_login}.py`: optional Simple-mode Codex worker and one-time
+  existing-account sign-in for the embedded Blender conversation.
 - `agent/relay/{Dockerfile,compose.yml,Caddyfile,configure.py}`: HTTPS + persistent
   Docker volume deployment; credentials generated locally, never committed.
 - `agent/relay/deploy-gce.sh`: Cloud Shell helper for a single persistent GCE relay
@@ -89,7 +112,8 @@ Build integration is also in-repo through `scripts/apply-ios-agent-bridge.py`, `
   The two byte values sum exactly to 6 GiB (6442450944 bytes). Treat this as strong
   evidence of an approximately 6 GiB current process memory budget for this
   Signulous-installed profile, not as a guaranteed fixed jetsam threshold.
-- Latest local behavior suite: 17 passed. Covers duplicate prevention, lost
+- Prior bridge behavior suite: 17 passed before the embedded-chat patch. The current
+  CI run adds chat protocol/restart tests. It covers duplicate prevention, lost
   acknowledgements, persisted issued jobs, app restart journal/outbox, scene changes
   including in-file scene switching, expiry/uncertain outcomes, offline device,
   queue limits/cancellation, script traversal/symlinks/hash conflicts, Python
@@ -111,6 +135,11 @@ That success is not completion of the full OAuth security design. `agent/relay/s
 - [x] Bridge-enabled IPA installed on the physical iPad.
 - [x] Persistent cloud relay deployed and paired.
 - [x] Live ChatGPT-to-iPad Blender control established using **GhostBlender Simple** and used for real development.
+- [x] Embedded Conversation / Workspace Insight prototype proven visible on the live iPad.
+- [x] Durable relay chat protocol and Codex worker implemented in source.
+- [ ] Redeploy the current relay and complete the one-time Codex/ChatGPT device-code sign-in.
+- [ ] Run live in-Blender AI chat acceptance on the existing iPad prototype, including one inspected mutation.
+- [ ] Build/install a later IPA to prove the now-bundled companion UI survives a clean install.
 - [ ] Keep Simple as the private development bridge while active development benefits from its lower setup friction.
 - [ ] Before broader/public/multi-user use, move the ChatGPT-facing side to the full authenticated OAuth path and run end-to-end OAuth acceptance.
 - [ ] Expand regression evidence for reconnect, suspension/resume, crash recovery, capture, stale-job handling and normal Files behavior.

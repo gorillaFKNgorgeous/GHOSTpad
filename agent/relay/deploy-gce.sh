@@ -28,7 +28,7 @@ if [[ -z "$ZONE" ]]; then
   mapfile -t relay_zones < <(
     gcloud compute instances list \
       --project "$PROJECT" \
-      --filter="name=($VM)" \
+      --filter="name=$VM" \
       --format='value(zone.basename())'
   )
   if (( ${#relay_zones[@]} > 1 )); then

@@ -7,10 +7,6 @@
 set -Eeuo pipefail
 
 VM="${GHOSTBLENDER_VM:-ghostblender-relay}"
-ZONE="${GHOSTBLENDER_ZONE:-us-west1-b}"
-REGION="${ZONE%-*}"
-NETWORK="${GHOSTBLENDER_NETWORK:-ghostblender-net}"
-SUBNET="${GHOSTBLENDER_SUBNET:-ghostblender-relay-${REGION}}"
 ADDRESS="${GHOSTBLENDER_ADDRESS:-ghostblender-relay-ip}"
 REPO="https://github.com/gorillaFKNgorgeous/GHOSTpad.git"
 LEGACY_REDIRECT="https://chatgpt.com/connector_platform_oauth_redirect"
@@ -22,23 +18,75 @@ if [[ -z "$PROJECT" || "$PROJECT" == "(unset)" ]]; then
   exit 1
 fi
 
-echo "Project: $PROJECT"
-echo "Region:  $REGION"
-echo "VM:      $VM"
-echo "Address: $ADDRESS"
-
 gcloud services enable compute.googleapis.com iap.googleapis.com --project "$PROJECT" >/dev/null
 
-if ! gcloud compute networks describe "$NETWORK" --project "$PROJECT" >/dev/null 2>&1; then
-  gcloud compute networks create "$NETWORK" --project "$PROJECT" --subnet-mode=custom
+# Prefer the location/network of an existing relay VM. Earlier versions defaulted
+# to us-west1-b, which can accidentally try to create a second subnet whose CIDR
+# overlaps the already-running relay network in another region.
+ZONE="${GHOSTBLENDER_ZONE:-}"
+if [[ -z "$ZONE" ]]; then
+  mapfile -t relay_zones < <(
+    gcloud compute instances list \
+      --project "$PROJECT" \
+      --filter="name=($VM)" \
+      --format='value(zone.basename())'
+  )
+  if (( ${#relay_zones[@]} > 1 )); then
+    echo "More than one VM named $VM exists. Set GHOSTBLENDER_ZONE explicitly." >&2
+    printf '  %s\n' "${relay_zones[@]}" >&2
+    exit 1
+  elif (( ${#relay_zones[@]} == 1 )); then
+    ZONE="${relay_zones[0]}"
+  else
+    ZONE="us-west1-b"
+  fi
+fi
+REGION="${ZONE%-*}"
+
+instance_exists=0
+if gcloud compute instances describe "$VM" --project "$PROJECT" --zone "$ZONE" >/dev/null 2>&1; then
+  instance_exists=1
 fi
 
-if ! gcloud compute networks subnets describe "$SUBNET" --project "$PROJECT" --region "$REGION" >/dev/null 2>&1; then
-  gcloud compute networks subnets create "$SUBNET" \
-    --project "$PROJECT" \
-    --region "$REGION" \
-    --network "$NETWORK" \
-    --range 10.42.0.0/24
+if [[ "$instance_exists" == 1 ]]; then
+  vm_network_url="$(gcloud compute instances describe "$VM" --project "$PROJECT" --zone "$ZONE" \
+    --format='get(networkInterfaces[0].network)')"
+  vm_subnet_url="$(gcloud compute instances describe "$VM" --project "$PROJECT" --zone "$ZONE" \
+    --format='get(networkInterfaces[0].subnetwork)')"
+  NETWORK="${GHOSTBLENDER_NETWORK:-${vm_network_url##*/}}"
+  SUBNET="${GHOSTBLENDER_SUBNET:-${vm_subnet_url##*/}}"
+else
+  NETWORK="${GHOSTBLENDER_NETWORK:-ghostblender-net}"
+  SUBNET="${GHOSTBLENDER_SUBNET:-ghostblender-relay-${REGION}}"
+fi
+
+echo "Project: $PROJECT"
+echo "Zone:    $ZONE"
+echo "Region:  $REGION"
+echo "VM:      $VM"
+echo "Network: $NETWORK"
+echo "Subnet:  $SUBNET"
+echo "Address: $ADDRESS"
+
+if [[ "$instance_exists" == 0 ]]; then
+  if ! gcloud compute networks describe "$NETWORK" --project "$PROJECT" >/dev/null 2>&1; then
+    gcloud compute networks create "$NETWORK" --project "$PROJECT" --subnet-mode=custom
+  fi
+
+  if ! gcloud compute networks subnets describe "$SUBNET" --project "$PROJECT" --region "$REGION" >/dev/null 2>&1; then
+    # Pick the historical relay CIDR only when it is actually unused. If another
+    # subnet already owns it, choose a distinct private /24 rather than colliding.
+    subnet_range="10.42.0.0/24"
+    if gcloud compute networks subnets list --project "$PROJECT" \
+        --network "$NETWORK" --format='value(ipCidrRange)' | grep -Fx "$subnet_range" >/dev/null; then
+      subnet_range="10.43.0.0/24"
+    fi
+    gcloud compute networks subnets create "$SUBNET" \
+      --project "$PROJECT" \
+      --region "$REGION" \
+      --network "$NETWORK" \
+      --range "$subnet_range"
+  fi
 fi
 
 if ! gcloud compute firewall-rules describe ghostblender-relay-https --project "$PROJECT" >/dev/null 2>&1; then
@@ -58,11 +106,6 @@ if ! gcloud compute firewall-rules describe ghostblender-relay-iap-ssh --project
     --allow tcp:22 \
     --source-ranges 35.235.240.0/20 \
     --target-tags ghostblender-relay
-fi
-
-instance_exists=0
-if gcloud compute instances describe "$VM" --project "$PROJECT" --zone "$ZONE" >/dev/null 2>&1; then
-  instance_exists=1
 fi
 
 # The relay origin is part of OAuth metadata and the device pairing. Keep it

@@ -12,7 +12,7 @@ REGION="${ZONE%-*}"
 NETWORK="${GHOSTBLENDER_NETWORK:-ghostblender-net}"
 SUBNET="${GHOSTBLENDER_SUBNET:-ghostblender-relay-${REGION}}"
 ADDRESS="${GHOSTBLENDER_ADDRESS:-ghostblender-relay-ip}"
-REPO="https://github.com/gorillaFKNgorgeous/-blender-ipad-M4.git"
+REPO="https://github.com/gorillaFKNgorgeous/GHOSTpad.git"
 LEGACY_REDIRECT="https://chatgpt.com/connector_platform_oauth_redirect"
 
 PROJECT="${GOOGLE_CLOUD_PROJECT:-$(gcloud config get-value project 2>/dev/null || true)}"
@@ -162,6 +162,7 @@ set -Eeuo pipefail
 if [[ ! -d "\$HOME/ghostblender/.git" ]]; then
   git clone --depth 1 "$REPO" "\$HOME/ghostblender"
 else
+  git -C "\$HOME/ghostblender" remote set-url origin "$REPO"
   git -C "\$HOME/ghostblender" fetch --depth 1 origin main
   git -C "\$HOME/ghostblender" checkout main
   git -C "\$HOME/ghostblender" reset --hard origin/main
@@ -216,3 +217,6 @@ echo "For a NEW ChatGPT developer-mode app, ChatGPT will display the exact redir
 echo "The relay is initially seeded with the stable issuer-aware callback:"
 echo "  $LEGACY_REDIRECT"
 echo "If ChatGPT displays a different callback, add that exact URI to OAUTH_REDIRECT_URIS in .env and restart docker-compose before authorizing."
+echo
+echo "One-time embedded AI sign-in (uses your Codex/ChatGPT account, not an API key):"
+echo "  gcloud compute ssh $VM --zone $ZONE --tunnel-through-iap --command 'cd ~/ghostblender/agent/relay && sudo docker-compose exec relay python chat_login.py'"

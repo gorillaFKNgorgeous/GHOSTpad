@@ -2732,7 +2732,14 @@ static UIViewController *GRTopController(void)
   return controller;
 }
 
+static void GRPresentExportAttempt(NSArray<NSString *> *paths, NSString *directory, NSString *title, int attempt);
+
 extern "C" void GRPresentExport(NSArray<NSString *> *paths, NSString *directory, NSString *title)
+{
+  GRPresentExportAttempt(paths, directory, title, 0);
+}
+
+static void GRPresentExportAttempt(NSArray<NSString *> *paths, NSString *directory, NSString *title, int attempt)
 {
   NSMutableArray<NSURL *> *urls = [NSMutableArray array];
   for (NSString *path in paths) {
@@ -2741,7 +2748,18 @@ extern "C" void GRPresentExport(NSArray<NSString *> *paths, NSString *directory,
     }
   }
   UIViewController *presenter = GRTopController();
-  if (!urls.count || !presenter) {
+  if (!urls.count) {
+    return;
+  }
+  /* iOS drops a presentation requested while another one is still animating. */
+  if (!presenter || presenter.isBeingDismissed || presenter.isBeingPresented ||
+      presenter.presentingViewController.isBeingDismissed)
+  {
+    if (attempt < 20) {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        GRPresentExportAttempt(paths, directory, title, attempt + 1);
+      });
+    }
     return;
   }
   static GRExporter *delegate;

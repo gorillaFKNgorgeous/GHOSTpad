@@ -285,6 +285,7 @@ static void After(double seconds, dispatch_block_t block)
                 NSString *render = [NSTemporaryDirectory() stringByAppendingPathComponent:@"render_test.mp4"];
                 [@"x" writeToFile:render atomically:YES encoding:NSUTF8StringEncoding error:nil];
                 ghostroom_harness_export(@[ render ], NSTemporaryDirectory(), @"Rendered into GHOSTpad/renders");
+                After(1.5, ^{
                 UIViewController *explain = composer.window.rootViewController.presentedViewController;
                 Check([explain isKindOfClass:[UIAlertController class]], @"render export offers Save to Files");
                 [explain dismissViewControllerAnimated:NO completion:nil];
@@ -298,6 +299,7 @@ static void After(double seconds, dispatch_block_t block)
                   printf("HARNESS RESULT failures=%d\n", failures);
                   fflush(stdout);
                   exit(failures ? 1 : 0);
+                });
                 });
                 });
               });

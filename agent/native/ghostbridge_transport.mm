@@ -177,11 +177,17 @@ static PyObject *gb_status(PyObject *, PyObject *)
     "physical_footprint_bytes", ok ? (unsigned long long)vm.phys_footprint : 0ULL);
 }
 
+/* GHOSTroom native workspace (ghostroom_ui.mm). */
+extern "C" PyObject *ghostroom_py_update(PyObject *, PyObject *);
+extern "C" PyObject *ghostroom_py_take(PyObject *, PyObject *);
+
 static PyMethodDef methods[] = {
     {"request", gb_request, METH_VARARGS, "Start one authenticated asynchronous HTTPS POST."},
     {"poll", gb_poll, METH_NOARGS, "Take a completed response, or None. Never blocks."},
     {"cancel", gb_cancel, METH_NOARGS, "Cancel I/O and discard its response."},
     {"status", gb_status, METH_NOARGS, "Foreground state and measured process memory."},
+    {"room_update", ghostroom_py_update, METH_VARARGS, "Render a GHOSTroom snapshot (JSON) natively."},
+    {"room_take", ghostroom_py_take, METH_NOARGS, "Take pending GHOSTroom UI commands (JSON strings)."},
     {nullptr, nullptr, 0, nullptr},
 };
 static PyModuleDef module = {PyModuleDef_HEAD_INIT, "_ghostbridge_transport", nullptr, -1, methods,

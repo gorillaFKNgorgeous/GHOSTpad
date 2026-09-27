@@ -105,6 +105,40 @@ def session(store):
     store.db.execute('UPDATE leases SET expires=? WHERE lease_id=?', (time.time() - 1, held['lease_id']))
     store.status('ipad')
 
+    # GHOSTroom room_submit / claim / complete / fail / stop / post_note / capture activity.
+    store.room_submit('ipad', 'f' * 32, 'Build a car', 'claude', 'do', 'primary', [])
+    task = store.chat_claim('ipad', 'claude', 'claude')
+    store.chat_complete('ipad', task['task_id'], 'Car built.')
+
+    store.room_submit('ipad', '1' * 32, 'Explain the scene', 'claude', 'explain', 'primary', [])
+    failing = store.chat_claim('ipad', 'claude', 'claude')
+    store.chat_fail('ipad', failing['task_id'], 'The provider is unavailable.')
+
+    store.room_submit('ipad', '2' * 32, 'Model a house', 'claude', 'do', 'primary', [])
+    stoppable = store.chat_claim('ipad', 'claude', 'claude')
+    store.room_stop('ipad', stoppable['task_id'])
+    expect_failure(lambda: store.submit('ipad', 'execute_python', py, 'claude-run-002', SCENE, 'claude'),
+                    'stopped_by_user')
+    store.chat_fail('ipad', stoppable['task_id'], 'Stopped.')
+
+    store.room_submit('ipad', '3' * 32, 'Review the model', 'claude', 'explain', 'primary', [])
+    readonly = store.chat_claim('ipad', 'claude', 'claude')
+    expect_failure(lambda: store.submit('ipad', 'execute_python', py, 'claude-run-003', SCENE, 'claude'),
+                    'read_only_role')
+    inspected = store.submit('ipad', 'inspect_scene', {}, 'claude-look-002', SCENE, 'claude')
+    run_job(store, inspected, {'ok': True, 'value': {'objects': []}, 'scene_id': SCENE})
+    store.post_note('ipad', 'claude', 'decision', 'Keep the current topology.', rationale='It already matches the brief.')
+    store.chat_complete('ipad', readonly['task_id'], 'Reviewed.')
+
+    store.room_submit('ipad', '4' * 32, 'Capture the viewport', 'claude', 'do', 'primary', [])
+    capturing = store.chat_claim('ipad', 'claude', 'claude')
+    cap = store.submit('ipad', 'capture', {'source': 'screenshot'}, 'claude-cap-001', SCENE, 'claude')
+    import base64
+    run_job(store, cap, {'ok': True, 'value': {'mime_type': 'image/png',
+                                               'data': base64.b64encode(b'\x89PNG fixture').decode(),
+                                               'width': 4, 'height': 3, 'source': 'screenshot'}})
+    store.chat_complete('ipad', capturing['task_id'], 'Captured.')
+
 
 def test_every_relay_ledger_entry_matches_the_schema():
     with tempfile.TemporaryDirectory() as temp:

@@ -27,9 +27,11 @@
         "lease_invalid",
         "script_workspace_busy",
         "tool_error",
-        "unclassified"
+        "unclassified",
+        "stopped_by_user",
+        "read_only_role"
       ],
-      "description": "tool_error: the Blender tool ran and reported an error (Python exception, invalid script name, render in progress). unclassified: only for mapping legacy free-text errors; new producers must choose a specific code. lease_conflict: another participant holds the scene edit lease. lease_invalid: the presented lease is unknown, not the caller's, expired, implicit or for another scene. script_workspace_busy: another persistent-script write is still pending."
+      "description": "tool_error: the Blender tool ran and reported an error (Python exception, invalid script name, render in progress). unclassified: only for mapping legacy free-text errors; new producers must choose a specific code. lease_conflict: another participant holds the scene edit lease. lease_invalid: the presented lease is unknown, not the caller's, expired, implicit or for another scene. script_workspace_busy: another persistent-script write is still pending. stopped_by_user: the user stopped this GHOSTroom task; no further Blender work is accepted for it. read_only_role: the task's mode or role only permits inspection, so the mutating or persistent-code request was rejected before it ran."
     },
     "layer": {
       "enum": [

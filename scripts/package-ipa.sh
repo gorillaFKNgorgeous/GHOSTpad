@@ -107,6 +107,8 @@ agent_insight="$(find "$app_path/Assets" -type f -path '*/scripts/startup/ghostb
 require_nonempty "$agent_startup" "GhostBlender agent startup module"
 require_nonempty "$agent_core" "GhostBlender agent runtime tools"
 require_nonempty "$agent_insight" "GhostBlender embedded companion UI"
+agent_room="$(find "$app_path/Assets" -type f -path '*/scripts/startup/ghostbridge/ghostroom.py' -print -quit)"
+require_nonempty "$agent_room" "GHOSTroom runtime bridge"
 
 plist="$app_path/Info.plist"
 executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")"
@@ -121,6 +123,11 @@ if (( asset_file_count < ASSET_FILE_MIN )); then
   fail "Blender.app contains only $asset_file_count asset files; expected at least $ASSET_FILE_MIN"
 fi
 echo "Verified bundle identity, version, and $asset_file_count asset files"
+# The native GHOSTroom workspace must be linked into the executable's GhostBlender module.
+if ! LC_ALL=C grep -a -q 'room_update' "$app_path/$executable"; then
+  fail "Native GHOSTroom workspace is not linked into $executable"
+fi
+echo "Verified native GHOSTroom workspace in $executable"
 
 launch_storyboard="$(/usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' "$plist")"
 [[ "$launch_storyboard" == "Main" ]] || \

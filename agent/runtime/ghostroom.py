@@ -746,7 +746,8 @@ def recovery_info(client):
     task = tasks.get(task_id, {}) if task_id else {}
     names = _agent_names(client.state)
     entries = [e for e in client.state['ledger'] if task_id and e.get('task_id') == task_id]
-    last = next((e for e in reversed(entries) if e.get('outcome') in ('completed', 'failed', 'uncertain')), None)
+    last = next((e for e in reversed(entries) if e.get('label') and e.get('outcome') in (
+        'requested', 'completed', 'failed', 'uncertain')), None)
     evidence = next((e for e in reversed(entries) if e.get('artifacts')), None)
     executing = recovery.get('executing')
     runtime = client.runtime_getter()
@@ -771,7 +772,9 @@ def recovery_info(client):
     return {'title': task.get('title') or 'Previous task', 'task_id': task_id, 'agent_id': task.get('agent_id'),
             'agent': names.get(task.get('agent_id'), task.get('agent_id') or 'Agent'), 'state': state_now,
             'headline': headline,
-            'last_activity': last.get('label') if last else None,
+            'last_activity': (last['label'] + (' (was in progress)' if last.get('outcome') == 'requested' else
+                                               f" ({last['outcome']})" if last.get('outcome') != 'completed'
+                                               else '')) if last else None,
             'last_time': last.get('time') if last else None,
             'interrupted_operation': interrupted,
             'mutation_possible': bool(interrupted and interrupted.get('operation') in ('execute_python',

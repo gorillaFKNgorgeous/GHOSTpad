@@ -21,12 +21,12 @@ def transform(root: Path, harness: Path):
         content = content.replace(old, new, 1)
     cm = cmake.read_text()
     anchor = 'blender_add_lib(bf_python "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")'
-    if cm.count(anchor) != 1 or 'ghostbridge_transport.mm' in cm:
+    if cm.count(anchor) != 1 or 'ghostbridge_transport.mm' in cm or 'ghostroom_ui.mm' in cm:
         raise RuntimeError('Pinned bf_python CMake anchor changed')
     addition = '''if(WITH_APPLE_CROSSPLATFORM)
-  list(APPEND SRC ghostbridge_transport.mm)
+  list(APPEND SRC ghostbridge_transport.mm ghostroom_ui.mm)
   add_definitions(-DWITH_GHOSTBRIDGE_IOS)
-  set_source_files_properties(ghostbridge_transport.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  set_source_files_properties(ghostbridge_transport.mm ghostroom_ui.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   # Blender's cross-platform setup currently points CMAKE_SYSTEM_FRAMEWORK_PATH at
   # the platform directory rather than the selected iPhoneOS SDK. Resolve these
   # two bridge-only system frameworks explicitly inside CMAKE_OSX_SYSROOT so the
@@ -44,7 +44,20 @@ def transform(root: Path, harness: Path):
     NO_DEFAULT_PATH
     REQUIRED
   )
-  list(APPEND LIB ${GHOSTBRIDGE_FOUNDATION} ${GHOSTBRIDGE_UIKIT})
+  # GHOSTroom's native workspace: photo picking and file content types.
+  find_library(GHOSTBRIDGE_PHOTOSUI
+    NAMES PhotosUI
+    PATHS "${GHOSTBRIDGE_IOS_FRAMEWORKS}"
+    NO_DEFAULT_PATH
+    REQUIRED
+  )
+  find_library(GHOSTBRIDGE_UTTYPES
+    NAMES UniformTypeIdentifiers
+    PATHS "${GHOSTBRIDGE_IOS_FRAMEWORKS}"
+    NO_DEFAULT_PATH
+    REQUIRED
+  )
+  list(APPEND LIB ${GHOSTBRIDGE_FOUNDATION} ${GHOSTBRIDGE_UIKIT} ${GHOSTBRIDGE_PHOTOSUI} ${GHOSTBRIDGE_UTTYPES})
 endif()
 
 '''
@@ -55,6 +68,7 @@ endif()
     interface.write_text(content)
     cmake.write_text(cm.replace(anchor, addition + anchor, 1))
     shutil.copyfile(harness / 'agent/native/ghostbridge_transport.mm', interface.parent / 'ghostbridge_transport.mm')
+    shutil.copyfile(harness / 'agent/native/ghostroom_ui.mm', interface.parent / 'ghostroom_ui.mm')
     shutil.copytree(harness / 'agent/runtime', target, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
 
     # Surface the persistent native render diagnostics through the existing MCP diagnostics
@@ -71,7 +85,7 @@ endif()
         raise RuntimeError('Pinned GhostBlender diagnostics log anchor changed')
     runtime_core.write_text(runtime_content.replace(log_anchor, log_replacement, 1))
 
-    print('Installed native transport and persistent GhostBlender startup dispatcher')
+    print('Installed native transport, native GHOSTroom workspace and persistent GhostBlender startup dispatcher')
 
 
 if __name__ == '__main__':

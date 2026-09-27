@@ -180,6 +180,8 @@ class RoomClient:
             self.state['attachments'] = [a for a in self.state['attachments'] if a['id'] != command.get('id')]
         elif kind == 'recovery':
             self.recovery_action(command.get('action'))
+        elif kind == 'forward_note':
+            self.forward_note(command.get('item_id'))
         elif kind == 'fetch' and isinstance(command.get('artifact_id'), str):
             self.state.setdefault('fetch_queue', [])
             if command['artifact_id'] not in self.state['fetch_queue']:
@@ -226,6 +228,16 @@ class RoomClient:
         self.mark()
         self.save(force=True)  # an unsent instruction must survive a crash
         return message_id
+
+    def forward_note(self, item_id):
+        """Hand an agent's handoff/review note to the agent it names, with the user's approval."""
+        note = next((i for i in build_items(self) if i['id'] == item_id and i['type'] == 'note'), None)
+        if not note or not note.get('forward_to'):
+            return
+        role = 'reviewer' if note['category'] == 'review' else 'primary'
+        self.send(f"{note['agent']} left this {note['category']} for you in the shared workspace:\n\n"
+                  f"{note['text']}\n\nRead workspace_brief, inspect the live scene and take it from here.",
+                  agent_id=note['forward_to'], mode='do', role=role)
 
     def recovery_action(self, action):
         recovery = self.state.get('recovery')
@@ -635,10 +647,13 @@ def build_items(client):
                               'agent': names.get(agent_id, agent_id or 'Agent'), 'task_id': task_id,
                               'failure': payload.get('failure')})
             elif kind == 'note':
+                handoff = payload.get('handoff') or {}
+                target = handoff.get('to') if handoff.get('to') in names else None
                 items.append({'id': f'e{seq}', 'type': 'note', 'text': value['text'], 'time': when,
                               'agent': names.get(agent_id, agent_id or 'Agent'),
                               'category': payload.get('category', 'summary'),
-                              'rationale': payload.get('rationale'), 'handoff': payload.get('handoff')})
+                              'rationale': payload.get('rationale'), 'handoff': payload.get('handoff'),
+                              'forward_to': target, 'forward_name': names.get(target) if target else None})
             continue
         entry = value
         if entry.get('job_id'):

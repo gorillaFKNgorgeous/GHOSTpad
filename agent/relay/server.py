@@ -109,7 +109,8 @@ def tools_list():
         {'name': 'post_note',
          'description': 'Record a structured note for the user and every other agent in the shared ledger: '
                         'decision (requires rationale), review, handoff, question, summary or warning. Shown in '
-                        'GHOSTroom. Use for findings, review verdicts, handoffs and open questions.',
+                        'GHOSTroom. Use for findings, review verdicts, handoffs and open questions. Set "to" to an '
+                        'agent_id (see workspace_brief) to address it; the user can forward it to that agent.',
          'inputSchema': schema({'category': {'type':'string','enum':['decision','review','handoff','question',
                                                                       'summary','warning']},
                                 'summary': string, 'rationale': string,
@@ -195,10 +196,13 @@ class App:
             handoff = None
             if args['category'] == 'handoff':
                 handoff = {'from': participant, 'state_of_work': args['summary'][:4000]}
-                if args.get('to'):
-                    handoff['to'] = args['to'][:80]
-                if args.get('next_steps'):
-                    handoff['next_steps'] = [args['next_steps'][:1000]]
+            if args.get('to'):
+                if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}', args['to']):
+                    raise ValueError('invalid_note_recipient')
+                handoff = handoff or {'from': participant, 'state_of_work': args['summary'][:4000]}
+                handoff['to'] = args['to']
+            if handoff and args.get('next_steps'):
+                handoff['next_steps'] = [args['next_steps'][:1000]]
             return self.store.post_note(self.device_id, participant, args['category'], args['summary'],
                                         args.get('rationale'), handoff)
         if name == 'read_ledger':

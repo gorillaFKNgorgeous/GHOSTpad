@@ -81,6 +81,7 @@ jobs:
             -DGHOSTROOM_HARNESS -target arm64-apple-ios17.0-simulator -isysroot "$sdk_path" \
             agent/native/ghostroom_ui.mm agent/native/harness/ghostroom_harness.mm \
             -framework UIKit -framework Foundation -framework PhotosUI -framework UniformTypeIdentifiers \
+            -framework CoreGraphics -framework QuartzCore \
             -o "$app/GHOSTroomHarness"
           cp agent/native/harness/Info.plist "$app/Info.plist"
           cp -R build/harness/snapshots build/harness/evidence "$app/"

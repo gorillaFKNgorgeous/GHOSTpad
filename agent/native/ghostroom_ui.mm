@@ -1972,6 +1972,17 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
     why.text = [@"Why: " stringByAppendingString:rationale];
     [cell.stack addArrangedSubview:why];
   }
+  NSString *target = GRStr(item[@"forward_name"]);
+  if (target.length) {
+    NSString *identifier = GRStr(item[@"id"]);
+    UIButton *forward = GRTintedButton([NSString stringWithFormat:@"Hand to %@", target],
+                                       @"arrowshape.turn.up.right", GRViolet());
+    [forward addAction:[UIAction actionWithHandler:^(UIAction *a) {
+               GRSend(@{@"type" : @"forward_note", @"item_id" : identifier});
+             }]
+        forControlEvents:UIControlEventPrimaryActionTriggered];
+    [cell.stack addArrangedSubview:GRStack(@[ forward, GRSpacer() ], UILayoutConstraintAxisHorizontal, 0)];
+  }
 }
 
 - (void)configureSystem:(GRItemCell *)cell item:(NSDictionary *)item

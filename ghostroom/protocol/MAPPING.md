@@ -32,7 +32,7 @@ yet.
 
 All three types get `correlation = message_id`, `parent = message_id` (the
 user message event), and `stream = {stream_id: reply.stream_id, seq}`. The
-relay has sent `stream_id` since the cursor fix; older relays leave a gap.
+relay sends `stream_id` once PR #3 (cursor fix) is merged; older relays leave a gap.
 
 | `type` | `kind` | `status` | `origin` | `body` |
 | --- | --- | --- | --- | --- |
@@ -58,7 +58,7 @@ Gaps:
   is discussing, inspecting or executing. GHOSTroom `inspect`/`execute`
   events for an agent's turn would need the worker to report its MCP tool
   calls (the Codex SDK streams these; `chat.py` discards them).
-- **`stream_id` (fixed).** CURRENT-SHAPES §7: the relay now sends a
+- **`stream_id` (fixed in PR #3).** CURRENT-SHAPES §7: with PR #3 the relay sends a
   per-database `stream_id` plus `reset`, and the bundled `insight.py` resets
   its cursor on either. The live shim still lacks it.
 - No intermediate assistant text, no artifacts (captures the agent took stay

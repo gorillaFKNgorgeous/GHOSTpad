@@ -178,7 +178,7 @@ At most one pending message is sent per request (UI blocks a second send,
 ```json
 {"cursor": <int>, "ack_ids": ["<id>", …],
  "events": [{"seq": <int>, "message_id": "<id>|null", "type": "status|final|error", "text": "…"}],
- "stream_id": "<32 hex>", "reset": <bool>}   // stream_id/reset: added by the §7 fix
+ "stream_id": "<32 hex>", "reset": <bool>}   // stream_id/reset: added by the §7 fix in PR #3
 ```
 
 Event `type` is enforced to `status|final|error` (`store.py:51`); text is
@@ -252,8 +252,9 @@ Related gaps (not skips):
   modules consume the same reply with independent cursors. The shim should be
   removed when the bundled companion ships.
 
-**Fixed (branch `claude/ghostroom-protocol-groundwork-moht84`, after this
-audit; line numbers above refer to the pre-fix tree):**
+**Fix: PR #3 (`claude/chat-cursor-reset-fix`, split out of this PR so it can
+be reviewed and merged on its own). Line numbers above refer to the pre-fix
+tree, which is what this PR still contains:**
 
 - The relay stores a random `chat_stream_id` once per database
   (`relay_meta` table) and adds `stream_id` and `reset` to every chat reply.

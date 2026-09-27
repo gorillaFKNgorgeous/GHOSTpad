@@ -36,23 +36,32 @@ A fresh session should be able to resume from this file alone.
       into `.github/workflows/agent-checks.yml` (protocol job). A
       `pull_request` trigger was added so PRs run it too.
 
-## After Step 3
+## After Step 3: review round on PR #2 (2026-09-27)
 
-- Stopped after Step 3 as instructed. No UI work yet; the only relay/runtime
-  change is the approved cursor fix below. PR #2 (ready for review) carries
-  everything.
-- [x] **Cursor skip fix** (approved): relay `stream_id` + `reset` in chat
-      replies (`agent/relay/store.py`), bundled `insight.py` resets its
-      cursor on either, tests in `agent/tests/test_chat_cursor.py`. Takes
-      effect on the device only after a relay redeploy **and** an IPA that
-      bundles `insight.py`. The live shim is unchanged (see CURRENT-SHAPES §7).
-- Candidate next steps, in the order I'd suggest:
-  1. (done: cursor fix)
-  2. Relay adapter that emits `ghostroom/0` events and ledger entries from
-     the existing chat and job tables (read-only projection, no behavior
-     change).
-  3. Typed failure codes on relay chat errors (MAPPING §2 gap).
-  4. Edit lease enforcement in `Store.submit` (MAPPING §8 gap).
+PR layout. GHOSTpad stays one public repository; there is no separate service repo.
+
+| PR | branch | contents |
+| --- | --- | --- |
+| #2 | `claude/ghostroom-protocol-groundwork-moht84` | protocol groundwork, secret-scan CI, script-workspace investigation doc |
+| #3 | `claude/chat-cursor-reset-fix` (from `main`) | cursor fix only: `store.py`, `insight.py`, `test_chat_cursor.py` |
+| next | stacked on #2 | B1.5 participant identity, B2 ledger, B3 leases, script-workspace lock |
+
+- [x] **Cursor fix split into PR #3** and removed from this branch. The
+      docs here describe it as "PR #3".
+- [ ] **Secret-scan CI**: capability URLs, bearer/access tokens, provider
+      credentials, device/agent/OAuth secrets, public IPs, IP-embedding relay
+      hostnames. Synthetic examples use reserved values.
+- [ ] **Script workspace investigation** (`docs/ghostroom/SCRIPT-WORKSPACE.md`),
+      written before any `write_script` policy.
+- [ ] **B1.5 participant identity**: a capability maps server-side to a
+      participant_id. `clientInfo` is an unverified label only. The existing
+      shared Simple capability maps to `legacy-unattributed`.
+- [ ] **B2 ledger** in the relay database, written in the same transaction as
+      the state change. Never infers success.
+- [ ] **B3 edit leases**, enforced from the start: explicit `lease_id` or an
+      implicit per-job scene lease; `lease_conflict` otherwise.
+- [ ] **Script workspace lock**, separate from the scene lease. Every
+      `write_script` is ledgered as a persistent-code risk.
 
 ## How to resume
 
@@ -66,9 +75,10 @@ Read `docs/ghostroom/CURRENT-SHAPES.md` (today), then
 
 ## Open questions
 
-1. **Cursor skip**: fixed for the relay and the bundled `insight.py`. Open:
-   should the live `ghostblender_insight.py` shim be patched too? That needs
-   an approved `write_script`. Otherwise it stays affected until the next IPA.
+1. **Cursor skip**: fixed in PR #3 for the relay and the bundled `insight.py`.
+   Open: should the live `ghostblender_insight.py` shim be patched too? That
+   needs an approved `write_script`. Otherwise it stays affected until the
+   next IPA.
 2. Could not confirm read-only whether the deployed relay currently returns
    the `chat` extension. That needs `execute_python` on the device, or relay
    logs.

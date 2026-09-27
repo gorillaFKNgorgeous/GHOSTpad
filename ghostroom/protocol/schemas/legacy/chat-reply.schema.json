@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/legacy/chat-reply.schema.json",
   "title": "Legacy: relay -> device chat extension (protocol 1)",
-  "description": "Shape returned today by agent/relay/store.py:241-256. Event rows come from chat_events (store.py:39-41) with type limited by store.py:51. Relays with the cursor fix add stream_id and reset (agent/relay/store.py chat_exchange); older relays omit both.",
+  "description": "Shape returned today by agent/relay/store.py:241-256. Event rows come from chat_events (store.py:39-41) with type limited by store.py:51. Relays with the cursor fix (PR #3) add stream_id and reset; older relays omit both.",
   "type": "object",
   "required": [
     "cursor",

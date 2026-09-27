@@ -1397,12 +1397,12 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
   /* The bottom edge follows the software keyboard explicitly (keyboardWillChange:), as a
    * required constraint, so the composer can never end up underneath the keyboard. */
   self.panelBottom = [panel.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-12];
-  NSLayoutConstraint *top = [panel.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12];
-  top.priority = UILayoutPriorityRequired - 1;
+  NSLayoutConstraint *panelTop = [panel.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12];
+  panelTop.priority = UILayoutPriorityRequired - 1;
   [NSLayoutConstraint activateConstraints:@[
     self.panelWidthConstraint,
     [panel.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor multiplier:0.72],
-    top,
+    panelTop,
     [panel.topAnchor constraintGreaterThanOrEqualToAnchor:self.window.topAnchor],
     self.panelBottom,
   ]];

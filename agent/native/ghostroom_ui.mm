@@ -950,6 +950,7 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
 @property(nonatomic, strong) UIButton *activityStop;
 @property(nonatomic, strong) UIStackView *recoveryBox;
 @property(nonatomic, strong) UIView *selectorsRow;
+@property(nonatomic, strong) UIButton *agentsButton;
 @property(nonatomic, strong) NSLayoutConstraint *panelBottom;
 @property(nonatomic) CGFloat keyboardOverlap;
 @property(nonatomic, strong) UIView *recoveryCard;
@@ -1225,7 +1226,11 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
   UIButton *minimise = GRPlainButton(nil, @"chevron.down.circle.fill", GRMuted());
   minimise.accessibilityLabel = @"Minimise GHOSTroom and return to Blender";
   [minimise addTarget:self action:@selector(togglePanel) forControlEvents:UIControlEventPrimaryActionTriggered];
-  UIStackView *header = GRStack(@[ titles, GRSpacer(), self.dockButton, minimise ],
+  UIButton *agents = GRTintedButton(@"Agents", @"person.2.badge.gearshape", GRViolet());
+  agents.accessibilityLabel = @"Agents and connections: sign in, API keys, external agents";
+  [agents addTarget:self action:@selector(showAgents) forControlEvents:UIControlEventPrimaryActionTriggered];
+  self.agentsButton = agents;
+  UIStackView *header = GRStack(@[ titles, GRSpacer(), agents, self.dockButton, minimise ],
                                 UILayoutConstraintAxisHorizontal,
                                 4);
 

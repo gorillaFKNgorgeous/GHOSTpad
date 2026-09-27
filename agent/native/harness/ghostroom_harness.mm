@@ -266,7 +266,10 @@ static void After(double seconds, dispatch_block_t block)
                 Check([table numberOfRowsInSection:0] == [counts[@"long"] integerValue],
                       @"160-item timeline renders");
                 Shot(self.window, @"07-long");
-                [controller showAgents];
+                UIButton *agentsButton = [controller valueForKey:@"agentsButton"];
+                Check(agentsButton != nil && !agentsButton.hidden && agentsButton.window != nil,
+                      @"Agents button is visible in the header");
+                [agentsButton sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
                 After(1.0, ^{
                 UIViewController *presented = composer.window.rootViewController.presentedViewController;
                 Check([presented isKindOfClass:[UINavigationController class]], @"agents sheet opens");

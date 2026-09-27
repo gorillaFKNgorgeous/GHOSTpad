@@ -195,6 +195,9 @@ class RoomClientTests(unittest.TestCase):
             self.assertTrue(wait_until(caught_up))
         finally:
             router.close()
+        # The reply may be written after the sync inside caught_up(); the next
+        # exchange delivers it, as it would on the device.
+        client.apply(room.exchange(client.payload()))
 
         snapshot = ghostroom.build_snapshot(client)
         types = {item['type'] for item in snapshot['items']}

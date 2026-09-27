@@ -29,16 +29,18 @@ A fresh session should be able to resume from this file alone.
       protocol-1 schemas. `MAPPING.md` maps every CURRENT-SHAPES shape and
       lists the gaps.
 
-- [x] **Step 3**: 46 valid and 40 invalid fixtures (invalid = patches on a
+- [x] **Step 3**: 47 valid and 41 invalid fixtures (invalid = patches on a
       valid base, each with an expected error). `ghostroom/tests/test_protocol.py`
-      runs 92 tests: schemas are valid 2020-12, every schema/kind/artifact type/
+      runs 95 tests: schemas are valid 2020-12, every schema/kind/artifact type/
       required failure code is exercised, and no URLs appear in fixtures. Wired
       into `.github/workflows/agent-checks.yml` (protocol job). A
       `pull_request` trigger was added so PRs run it too.
 
-## Next (awaiting approval; nothing started)
+## After Step 3
 
-- Stopped after Step 3 as instructed. No UI or relay work yet.
+- Stopped after Step 3 as instructed. No UI work yet; the only relay/runtime
+  change is the approved cursor fix below. PR #2 (ready for review) carries
+  everything.
 - [x] **Cursor skip fix** (approved): relay `stream_id` + `reset` in chat
       replies (`agent/relay/store.py`), bundled `insight.py` resets its
       cursor on either, tests in `agent/tests/test_chat_cursor.py`. Takes

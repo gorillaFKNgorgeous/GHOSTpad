@@ -7,6 +7,7 @@ ledger entry inside the same transaction as the change itself, so the ledger
 is authoritative and is never reconstructed from timestamps afterwards
 (docs/ghostroom/LEDGER.md).
 """
+import base64
 import datetime
 import hashlib
 import json
@@ -27,12 +28,36 @@ WORKSPACE_MUTATING = {'write_script'}
 KEY = re.compile(r'^[a-zA-Z0-9_-]{8,80}$')
 CHAT_KEY = re.compile(r'^[a-f0-9]{32}$')
 SHA256 = re.compile(r'^[a-f0-9]{64}$')
+SHA256_32 = re.compile(r'^[a-f0-9]{32}$')
 PARTICIPANT_ID = re.compile(r'^[a-z0-9][a-z0-9._-]{2,63}$')
 PARTICIPANT_KINDS = ('user', 'agent', 'ghostblender', 'relay', 'system')
 
 # The shared GhostBlender Simple capability (and bearer/OAuth access on the full
 # relay) cannot tell its callers apart, so all of them are this one participant.
 LEGACY = 'legacy-unattributed'
+# The iPad owner, as the origin of GHOSTroom instructions.
+OWNER = 'owner'
+# The Blender side itself, as the origin of what it observes (files opened and saved).
+GHOSTBLENDER = 'ghostblender'
+
+# chat_messages doubles as the GHOSTroom task queue. One message is one task
+# (an agent turn); later messages to a busy agent may steer its running turn.
+TASK_COLUMNS = (('agent_id', 'TEXT'), ('participant_id', 'TEXT'), ('mode', 'TEXT'),
+                ('role', 'TEXT'), ('context', 'TEXT'), ('stop_requested', 'REAL'),
+                ('read_only', 'INTEGER'), ('steered_into', 'TEXT'), ('instruction_seq', 'INTEGER'))
+TASK_MODES = ('do', 'with_me', 'teach', 'explain', 'review_my_work')
+TASK_ROLES = ('primary', 'reviewer', 'specialist', 'critic', 'verifier')
+# Modes and roles that must never change Blender. Enforced here, at the one
+# place every agent's tool calls pass through, not in any agent's prompt.
+READ_ONLY_MODES = ('teach', 'explain', 'review_my_work')
+READ_ONLY_ROLES = ('reviewer', 'critic', 'verifier')
+ROOM_EVENT_TYPES = ('user', 'status', 'final', 'error', 'task', 'note')
+LEGACY_CHAT_TYPES = ('status', 'final', 'error')
+NOTE_CATEGORIES = ('decision', 'review', 'handoff', 'question', 'summary', 'warning')
+ROOM_TEXT = 16000
+ARTIFACT_MAX_BYTES = 2_000_000
+ARTIFACT_KEEP = 300
+IMAGE_TYPES = ('image/png', 'image/jpeg')
 
 JOB_SECONDS = 90
 # An implicit lease covers exactly one submitted job and ends with it, so it
@@ -79,6 +104,11 @@ class RelayFailure(ValueError):
     def __init__(self, value):
         self.failure = value
         super().__init__(json.dumps({'error': value['code'], 'failure': value}))
+
+
+def task_title(text):
+    line = next((part.strip() for part in str(text).splitlines() if part.strip()), 'Task')
+    return line[:80] + ('…' if len(line) > 80 else '')
 
 
 def category_for(operation):
@@ -137,13 +167,37 @@ class Store:
                 entry TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS ledger_device_seq ON ledger(device_id, seq);
             CREATE INDEX IF NOT EXISTS ledger_job ON ledger(job_id);
+            CREATE TABLE IF NOT EXISTS artifacts (
+                artifact_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, created REAL NOT NULL,
+                type TEXT NOT NULL, media_type TEXT NOT NULL, sha256 TEXT NOT NULL,
+                bytes INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL,
+                participant_id TEXT NOT NULL, job_id TEXT, title TEXT, data BLOB);
+            CREATE INDEX IF NOT EXISTS artifacts_device ON artifacts(device_id, created);
         ''')
         # Relay databases created before participants/leases existed: add the
         # columns in place. Old rows are attributed to the legacy participant.
         columns = {row[1] for row in self.db.execute('PRAGMA table_info(jobs)')}
-        for column in ('participant_id', 'lease_id'):
+        for column in ('participant_id', 'lease_id', 'task_id'):
             if column not in columns:
                 self.db.execute(f'ALTER TABLE jobs ADD COLUMN {column} TEXT')
+        # GHOSTroom tasks extend the chat queue in place, so the legacy N-panel
+        # chat and the native GHOSTroom share one agent-neutral history.
+        columns = {row[1] for row in self.db.execute('PRAGMA table_info(chat_messages)')}
+        for column, kind in TASK_COLUMNS:
+            if column not in columns:
+                self.db.execute(f'ALTER TABLE chat_messages ADD COLUMN {column} {kind}')
+        columns = {row[1] for row in self.db.execute('PRAGMA table_info(chat_events)')}
+        for column in ('agent_id', 'payload'):
+            if column not in columns:
+                self.db.execute(f'ALTER TABLE chat_events ADD COLUMN {column} TEXT')
+        self.db.execute(
+            'INSERT OR IGNORE INTO participants(participant_id,kind,provider,display_name,'
+            'capability_sha256,created) VALUES (?,?,?,?,NULL,?)',
+            (OWNER, 'user', None, 'You', time.time()))
+        self.db.execute(
+            'INSERT OR IGNORE INTO participants(participant_id,kind,provider,display_name,'
+            'capability_sha256,created) VALUES (?,?,?,?,NULL,?)',
+            (GHOSTBLENDER, 'ghostblender', None, 'GhostBlender', time.time()))
         self.db.execute('INSERT OR IGNORE INTO relay_meta VALUES (?,?)',
                         ('ledger_stream_id', uuid.uuid4().hex))
         # Identifies this database's chat_events sequence. A new or replaced
@@ -161,15 +215,22 @@ class Store:
             "SELECT value FROM relay_meta WHERE key='chat_stream_id'").fetchone()[0]
         self._recover_chat()
 
-    def _chat_event_locked(self, device_id, message_id, event_type, text):
-        if event_type not in ('status', 'final', 'error') or not isinstance(text, str):
+    def _chat_event_locked(self, device_id, message_id, event_type, text, agent_id=None, payload=None,
+                           limit=2000):
+        if event_type not in ROOM_EVENT_TYPES or not isinstance(text, str):
             raise ValueError('invalid_chat_event')
         text = text.strip()
-        if not text or len(text) > 2000:
+        if not text or len(text) > limit:
             raise ValueError('invalid_chat_event_text')
+        if agent_id is None and message_id:
+            row = self.db.execute('SELECT agent_id FROM chat_messages WHERE device_id=? AND message_id=?',
+                                  (device_id, message_id)).fetchone()
+            agent_id = row['agent_id'] if row else None
         self.db.execute(
-            'INSERT INTO chat_events(device_id,message_id,type,text,created) VALUES (?,?,?,?,?)',
-            (device_id, message_id, event_type, text, time.time()),
+            'INSERT INTO chat_events(device_id,message_id,type,text,created,agent_id,payload) '
+            'VALUES (?,?,?,?,?,?,?)',
+            (device_id, message_id, event_type, text, time.time(), agent_id,
+             json.dumps(payload, allow_nan=False) if payload is not None else None),
         )
 
     def _recover_chat(self):
@@ -177,7 +238,7 @@ class Store:
         # automatically after a relay restart.
         with self.lock, self.db:
             rows = self.db.execute(
-                "SELECT device_id,message_id FROM chat_messages WHERE state='running'"
+                "SELECT device_id,message_id FROM chat_messages WHERE state IN ('running','stopping')"
             ).fetchall()
             for row in rows:
                 self.db.execute(
@@ -185,12 +246,17 @@ class Store:
                     "WHERE device_id=? AND message_id=?",
                     (time.time(), row['device_id'], row['message_id']),
                 )
+                value = failure('interrupted_after_possible_mutation', 'router',
+                                'The relay restarted during this agent turn. It was not replayed; '
+                                'Blender may have been changed before the interruption.', True, 'after_inspect')
                 self._chat_event_locked(
                     row['device_id'],
                     row['message_id'],
                     'error',
                     'Previous AI turn was interrupted and was not replayed automatically.',
+                    payload={'failure': value},
                 )
+                self._task_event_locked(row['device_id'], row['message_id'], 'uncertain', failure_value=value)
                 self.db.execute(
                     'DELETE FROM chat_state WHERE device_id=?',
                     (row['device_id'],),
@@ -305,7 +371,8 @@ class Store:
 
     def _ledger(self, device_id, participant_id, category, summary, *, outcome=None, job=None,
                 job_state=None, result=None, lease_id=None, scene_id=None, failure_value=None,
-                supersedes=None, persistent_code=None, lease=None, rationale=None):
+                supersedes=None, persistent_code=None, lease=None, rationale=None, artifacts=None,
+                handoff=None):
         """Append one ledger entry. Callers are always inside the state change's transaction."""
         now = time.time()
         entry = {'entry_id': uuid.uuid4().hex, 'timestamp': rfc3339(now),
@@ -329,6 +396,10 @@ class Store:
             entry['persistent_code'] = persistent_code
         if lease:
             entry['lease'] = lease
+        if artifacts:
+            entry['artifacts'] = list(artifacts)
+        if handoff:
+            entry['handoff'] = handoff
         self.db.execute(
             'INSERT INTO ledger(entry_id,device_id,created,participant_id,category,outcome,job_id,lease_id,entry) '
             'VALUES (?,?,?,?,?,?,?,?,?)',
@@ -365,12 +436,13 @@ class Store:
         return value
 
     def _job_entry(self, device_id, row, outcome, summary, *, state=None, result=None,
-                   failure_value=None, supersedes=None, result_value=None):
+                   failure_value=None, supersedes=None, result_value=None, artifacts=None):
         participant_id = row['participant_id'] or LEGACY
         return self._ledger(
             device_id, participant_id, category_for(row['operation']), summary, outcome=outcome,
             job=row, job_state=state, result=result, lease_id=row['lease_id'],
             scene_id=row['scene_id'], failure_value=failure_value, supersedes=supersedes,
+            artifacts=artifacts,
             persistent_code=(self._persistent_code(row, result_value)
                              if row['operation'] in WORKSPACE_MUTATING else None))
 
@@ -695,8 +767,22 @@ class Store:
             active = self.db.execute("SELECT count(*) FROM jobs WHERE device_id=? AND state IN ('queued','issued')", (device_id,)).fetchone()[0]
             if active >= 8:
                 raise ValueError('device_queue_full')
+            task = self._running_task(device_id, participant_id)
+            if task is not None and task['stop_requested'] is not None:
+                rejection = self._task_rejection(
+                    device_id, participant_id, 'stopped_by_user',
+                    'The user stopped this task; no further Blender work is accepted for it.',
+                    request_id, operation)
+            elif (task is not None and task['read_only']
+                    and (operation in SCENE_MUTATING or operation in WORKSPACE_MUTATING)):
+                rejection = self._task_rejection(
+                    device_id, participant_id, 'read_only_role',
+                    f"This task is {task['role'] or 'primary'}/{task['mode'] or 'do'} and may only inspect; "
+                    'ask the user before changing Blender.', request_id, operation)
             lease, implicit_scope = None, None
-            if operation in SCENE_MUTATING:
+            if rejection is not None:
+                pass
+            elif operation in SCENE_MUTATING:
                 lease, needs_implicit, rejection = self._scene_lease_for_job(
                     device_id, participant_id, scene_id, lease_id, request_id, operation)
                 implicit_scope = 'scene' if needs_implicit else None
@@ -714,10 +800,12 @@ class Store:
                 job_id = uuid.uuid4().hex
                 self.db.execute(
                     'INSERT INTO jobs(job_id,device_id,request_id,digest,operation,arguments,boot_id,scene_id,'
-                    'state,created,expires,result,participant_id,lease_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    'state,created,expires,result,participant_id,lease_id,task_id) '
+                    'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                     (job_id, device_id, request_id, digest, operation, payload, status['boot_id'], scene_id,
                      'queued', now, now + JOB_SECONDS, None, participant_id,
-                     lease['lease_id'] if lease is not None else None))
+                     lease['lease_id'] if lease is not None else None,
+                     task['message_id'] if task is not None else None))
                 if implicit_scope:
                     implicit = self._start_lease(
                         device_id, participant_id, implicit_scope,
@@ -742,6 +830,8 @@ class Store:
             raise ValueError('heartbeat_too_large')
         with self.lock, self.db:
             self._expire(device_id)
+            previous = self.db.execute('SELECT heartbeat FROM device WHERE id=?', (device_id,)).fetchone()
+            self._observe_file(device_id, json.loads(previous['heartbeat']) if previous else None, heartbeat)
             self.db.execute('INSERT INTO device VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET heartbeat=excluded.heartbeat, seen=excluded.seen',
                             (device_id, heartbeat_json, time.time()))
             ack = None
@@ -796,6 +886,23 @@ class Store:
                            'scene_id': row['scene_id'], 'expires_at': row['expires']}
             return {'protocol': 1, 'ack': ack, 'job': job}
 
+    def _observe_file(self, device_id, previous, heartbeat):
+        """Ledger files opened and saved, as GhostBlender observed them (target.md §8)."""
+        now = heartbeat.get('observed') if isinstance(heartbeat.get('observed'), dict) else None
+        before = (previous or {}).get('observed') if isinstance((previous or {}).get('observed'), dict) else None
+        if now is None or before is None:
+            return
+        name, old_name = now.get('file'), before.get('file')
+        if not isinstance(name, str) or not name:
+            return
+        name = name[:200]
+        if name != old_name:
+            self._ledger(device_id, GHOSTBLENDER, 'file', f'{name} is now the open Blender file',
+                         scene_id=heartbeat.get('scene_id') if SHA256_32.fullmatch(str(heartbeat.get('scene_id')))
+                         else None)
+        elif before.get('unsaved_changes') is True and now.get('unsaved_changes') is False:
+            self._ledger(device_id, GHOSTBLENDER, 'file', f'{name} was saved')
+
     def _record_result(self, device_id, row, result, encoded, state):
         """Ledger the device-reported outcome of a job, in the result's transaction."""
         supersedes = None
@@ -808,10 +915,14 @@ class Store:
         if result['ok']:
             # The device ran the job to completion and reported success for this
             # exact job_id and boot_id. That report is the only evidence of success.
+            artifacts = None
+            if row['operation'] == 'capture':
+                artifact_id = self._capture_artifact(device_id, row, result.get('value'))
+                artifacts = [artifact_id] if artifact_id else None
             self._job_entry(device_id, row, 'completed',
                             f"{row['operation']} {row['job_id']} completed on the device{late}",
                             state=state, result=encoded, supersedes=supersedes,
-                            result_value=result.get('value'))
+                            result_value=result.get('value'), artifacts=artifacts)
         else:
             outcome, value = self._result_failure(row['operation'], result)
             self._job_entry(device_id, row, outcome,
@@ -892,11 +1003,7 @@ class Store:
                     if old['text'] != text:
                         raise ValueError('chat_message_id_reused_with_different_text')
                 else:
-                    self.db.execute(
-                        'INSERT INTO chat_messages(device_id,message_id,text,state,created) '
-                        "VALUES (?,?,?,'queued',?)",
-                        (device_id, message_id, text, time.time()),
-                    )
+                    self._insert_task(device_id, message_id, text, self.default_agent, 'do', 'primary', [])
                 ack_ids.append(message_id)
 
             rows = self.db.execute(
@@ -904,71 +1011,405 @@ class Store:
                 'WHERE device_id=? AND seq>? ORDER BY seq LIMIT 50',
                 (device_id, cursor),
             ).fetchall()
+            # The N-panel protocol only knows status/final/error. GHOSTroom's
+            # richer events share the stream and advance the cursor unseen.
             events = [
                 {
                     'seq': row['seq'],
                     'message_id': row['message_id'],
                     'type': row['type'],
-                    'text': row['text'],
+                    'text': row['text'][:2000],
                 }
-                for row in rows
+                for row in rows if row['type'] in LEGACY_CHAT_TYPES
             ]
             next_cursor = rows[-1]['seq'] if rows else cursor
             return {'cursor': next_cursor, 'ack_ids': ack_ids, 'events': events,
                     'stream_id': self.chat_stream_id, 'reset': reset}
 
-    def chat_claim(self, device_id):
+    def chat_claim(self, device_id, agent_id=None, participant_id=None):
+        """Claim the oldest queued task for agent_id (any agent when None)."""
         with self.lock, self.db:
-            row = self.db.execute(
-                "SELECT message_id,text FROM chat_messages "
-                "WHERE device_id=? AND state='queued' ORDER BY created LIMIT 1",
-                (device_id,),
-            ).fetchone()
+            if agent_id is None:
+                row = self.db.execute(
+                    "SELECT * FROM chat_messages "
+                    "WHERE device_id=? AND state='queued' ORDER BY created LIMIT 1",
+                    (device_id,),
+                ).fetchone()
+            else:
+                row = self.db.execute(
+                    "SELECT * FROM chat_messages WHERE device_id=? AND state='queued' "
+                    "AND coalesce(agent_id, ?)=? ORDER BY created LIMIT 1",
+                    (device_id, self.default_agent, agent_id),
+                ).fetchone()
             if not row:
                 return None
             changed = self.db.execute(
-                "UPDATE chat_messages SET state='running', started=? "
+                "UPDATE chat_messages SET state='running', started=?, participant_id=? "
                 "WHERE device_id=? AND message_id=? AND state='queued'",
-                (time.time(), device_id, row['message_id']),
+                (time.time(), participant_id, device_id, row['message_id']),
             )
             if changed.rowcount != 1:
                 return None
-            return {'id': row['message_id'], 'text': row['text']}
+            self._task_event_locked(device_id, row['message_id'], 'running')
+            return self._task_view(self.db.execute(
+                'SELECT * FROM chat_messages WHERE device_id=? AND message_id=?',
+                (device_id, row['message_id'])).fetchone())
 
-    def chat_event(self, device_id, message_id, event_type, text):
+    def chat_event(self, device_id, message_id, event_type, text, payload=None):
         with self.lock, self.db:
-            self._chat_event_locked(device_id, message_id, event_type, text)
+            self._chat_event_locked(device_id, message_id, event_type, text[:ROOM_TEXT] if isinstance(text, str)
+                                    else text, payload=payload, limit=ROOM_TEXT)
 
     def chat_complete(self, device_id, message_id, text):
         if not isinstance(text, str):
             raise ValueError('invalid_chat_final')
         text = text.strip()
-        if not text or len(text) > 2000:
+        if not text or len(text) > ROOM_TEXT:
             raise ValueError('invalid_chat_final')
         with self.lock, self.db:
-            changed = self.db.execute(
-                "UPDATE chat_messages SET state='completed', finished=? "
-                "WHERE device_id=? AND message_id=? AND state='running'",
-                (time.time(), device_id, message_id),
-            )
-            if changed.rowcount != 1:
+            row = self.db.execute(
+                "SELECT * FROM chat_messages WHERE device_id=? AND message_id=? AND state IN ('running','stopping')",
+                (device_id, message_id)).fetchone()
+            if row is None:
                 raise ValueError('chat_message_not_running')
-            self._chat_event_locked(device_id, message_id, 'final', text)
+            state = 'stopped' if row['stop_requested'] is not None else 'completed'
+            self.db.execute("UPDATE chat_messages SET state=?, finished=? WHERE device_id=? AND message_id=?",
+                            (state, time.time(), device_id, message_id))
+            self._chat_event_locked(device_id, message_id, 'final', text, limit=ROOM_TEXT)
+            participant = row['participant_id'] or row['agent_id'] or LEGACY
+            self._ledger(device_id, participant, 'response', text[:2000])
+            self._task_event_locked(device_id, message_id, state)
 
-    def chat_fail(self, device_id, message_id, text):
+    def chat_fail(self, device_id, message_id, text, failure_value=None):
         if not isinstance(text, str):
             raise ValueError('invalid_chat_error')
         text = text.strip()
-        if not text or len(text) > 2000:
+        if not text or len(text) > ROOM_TEXT:
             raise ValueError('invalid_chat_error')
         with self.lock, self.db:
-            changed = self.db.execute(
-                "UPDATE chat_messages SET state='failed', finished=? "
-                "WHERE device_id=? AND message_id=? AND state IN ('queued','running')",
-                (time.time(), device_id, message_id),
-            )
-            if changed.rowcount == 1:
-                self._chat_event_locked(device_id, message_id, 'error', text)
+            row = self.db.execute(
+                "SELECT * FROM chat_messages WHERE device_id=? AND message_id=? "
+                "AND state IN ('queued','running','stopping')", (device_id, message_id)).fetchone()
+            if row is None:
+                return
+            stopped = row['stop_requested'] is not None
+            if failure_value is None:
+                failure_value = failure('provider_unavailable', 'agent_provider', text, True, 'after_inspect',
+                                        agent_id=row['agent_id'])
+            if not self._mutation_during(device_id, message_id) and failure_value.get('code') != (
+                    'interrupted_after_possible_mutation'):
+                failure_value = {**failure_value, 'mutation_possible': False}
+            state = 'stopped' if stopped else 'failed'
+            self.db.execute("UPDATE chat_messages SET state=?, finished=? WHERE device_id=? AND message_id=?",
+                            (state, time.time(), device_id, message_id))
+            self._chat_event_locked(device_id, message_id, 'error', text, payload={'failure': failure_value},
+                                    limit=ROOM_TEXT)
+            participant = row['participant_id'] or row['agent_id'] or LEGACY
+            self._ledger(device_id, participant, 'failure', f"{row['agent_id'] or 'agent'} turn {state}: {text[:300]}",
+                         failure_value=failure_value)
+            self._task_event_locked(device_id, message_id, state, failure_value=failure_value)
+
+    # ------------------------------------------------------------------ GHOSTroom tasks
+
+    default_agent = 'codex'
+
+    def _insert_task(self, device_id, message_id, text, agent_id, mode, role, context, steer_into=None):
+        read_only = int(mode in READ_ONLY_MODES or role in READ_ONLY_ROLES)
+        self.db.execute(
+            'INSERT INTO chat_messages(device_id,message_id,text,state,created,agent_id,mode,role,context,'
+            'read_only,steered_into) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            (device_id, message_id, text, 'steer' if steer_into else 'queued', time.time(), agent_id, mode,
+             role, json.dumps(context, allow_nan=False), read_only, steer_into))
+        titles = [item.get('title') or item.get('kind') for item in context if isinstance(item, dict)]
+        self._chat_event_locked(device_id, message_id, 'user', text, agent_id=agent_id, limit=ROOM_TEXT,
+                                payload={'agent_id': agent_id, 'mode': mode, 'role': role,
+                                         'context': [str(t)[:80] for t in titles if t][:8],
+                                         'steer_into': steer_into})
+        artifact_ids = [item['artifact_id'] for item in context
+                        if isinstance(item, dict) and isinstance(item.get('artifact_id'), str)]
+        to = f' (to {agent_id}' + (f', {role}' if role and role != 'primary' else '') + \
+            (f', {mode}' if mode and mode != 'do' else '') + ')'
+        entry_id = self._ledger(device_id, OWNER, 'instruction',
+                                ('Redirect: ' if steer_into else '') + text[:1900] + to,
+                                artifacts=artifact_ids[:32] or None)
+        seq = self.db.execute('SELECT seq FROM ledger WHERE entry_id=?', (entry_id,)).fetchone()[0]
+        self.db.execute('UPDATE chat_messages SET instruction_seq=? WHERE device_id=? AND message_id=?',
+                        (seq, device_id, message_id))
+        if not steer_into:
+            self._task_event_locked(device_id, message_id, 'queued')
+
+    def _task_event_locked(self, device_id, task_id, state, failure_value=None):
+        row = self.db.execute('SELECT * FROM chat_messages WHERE device_id=? AND message_id=?',
+                              (device_id, task_id)).fetchone()
+        if row is None:
+            return
+        payload = {'task_id': task_id, 'state': state, 'agent_id': row['agent_id'],
+                   'mode': row['mode'], 'role': row['role'], 'title': task_title(row['text'])}
+        if failure_value:
+            payload['failure'] = failure_value
+        if state in ('stopped', 'failed', 'uncertain', 'completed'):
+            payload['mutation_possible'] = self._mutation_during(device_id, task_id)
+        self._chat_event_locked(device_id, task_id, 'task', f'{state}: {payload["title"]}', payload=payload,
+                                limit=ROOM_TEXT)
+        if state in ('running', 'stopped', 'completed', 'failed', 'uncertain'):
+            participant = row['participant_id'] or OWNER
+            verb = {'running': 'started', 'stopped': 'was stopped by the user',
+                    'completed': 'finished', 'failed': 'failed', 'uncertain': 'was interrupted'}[state]
+            self._ledger(device_id, participant, 'task',
+                         f"{row['agent_id'] or 'agent'} {verb}: {payload['title']}"
+                         + (' (Blender may have been changed)' if payload.get('mutation_possible')
+                            and state != 'completed' else ''))
+
+    def _mutation_during(self, device_id, task_id):
+        row = self.db.execute(
+            "SELECT 1 FROM jobs WHERE device_id=? AND task_id=? AND operation IN ('execute_python','write_script') "
+            "AND state IN ('issued','completed','failed','uncertain') LIMIT 1", (device_id, task_id)).fetchone()
+        return row is not None
+
+    def _running_task(self, device_id, participant_id):
+        return self.db.execute(
+            "SELECT * FROM chat_messages WHERE device_id=? AND participant_id=? AND state IN ('running','stopping') "
+            'ORDER BY started DESC LIMIT 1', (device_id, participant_id)).fetchone()
+
+    def _task_rejection(self, device_id, participant_id, code, message, request_id, operation):
+        value = failure(code, 'router', message, False, 'after_user_action')
+        self._ledger(device_id, participant_id, 'failure', f'{participant_id}: {operation} rejected ({code})',
+                     failure_value=value)
+        return value
+
+    @staticmethod
+    def _task_view(row):
+        try:
+            context = json.loads(row['context']) if row['context'] else []
+        except ValueError:
+            context = []
+        return {'id': row['message_id'], 'task_id': row['message_id'], 'text': row['text'],
+                'agent_id': row['agent_id'], 'mode': row['mode'] or 'do', 'role': row['role'] or 'primary',
+                'context': context, 'read_only': bool(row['read_only']), 'state': row['state'],
+                'created': row['created'], 'started': row['started'], 'finished': row['finished'],
+                'stop_requested': row['stop_requested'] is not None, 'participant_id': row['participant_id'],
+                'instruction_seq': row['instruction_seq']}
+
+    def room_submit(self, device_id, message_id, text, agent_id, mode='do', role='primary', context=(),
+                    running_steerable=False):
+        """Queue a GHOSTroom instruction. Returns 'queued', 'steer' or 'duplicate'.
+
+        When running_steerable is true and agent_id is already running a task, the
+        instruction is delivered into that running turn instead of waiting behind it.
+        """
+        if not isinstance(message_id, str) or not CHAT_KEY.fullmatch(message_id):
+            raise ValueError('invalid_chat_message_id')
+        if not isinstance(text, str) or not text.strip() or len(text.strip()) > ROOM_TEXT:
+            raise ValueError('invalid_chat_message_text')
+        if mode not in TASK_MODES or role not in TASK_ROLES:
+            raise ValueError('invalid_task_mode_or_role')
+        if not isinstance(agent_id, str) or not re.fullmatch(r'[a-z0-9][a-z0-9._-]{0,63}', agent_id):
+            raise ValueError('invalid_agent_id')
+        text = text.strip()
+        with self.lock, self.db:
+            old = self.db.execute('SELECT text FROM chat_messages WHERE device_id=? AND message_id=?',
+                                  (device_id, message_id)).fetchone()
+            if old:
+                if old['text'] != text:
+                    raise ValueError('chat_message_id_reused_with_different_text')
+                return 'duplicate'
+            steer_into = None
+            if running_steerable:
+                running = self.db.execute(
+                    "SELECT message_id,read_only FROM chat_messages WHERE device_id=? AND agent_id=? "
+                    "AND state='running' AND stop_requested IS NULL ORDER BY started DESC LIMIT 1",
+                    (device_id, agent_id)).fetchone()
+                if running is not None and not running['read_only'] and mode not in READ_ONLY_MODES \
+                        and role not in READ_ONLY_ROLES:
+                    steer_into = running['message_id']
+            self._insert_task(device_id, message_id, text, agent_id, mode, role, list(context), steer_into)
+            return 'steer' if steer_into else 'queued'
+
+    def take_steers(self, device_id, task_id):
+        """Instructions waiting to be delivered into a running task, oldest first."""
+        with self.lock, self.db:
+            rows = self.db.execute(
+                "SELECT * FROM chat_messages WHERE device_id=? AND state='steer' AND steered_into=? "
+                'ORDER BY created', (device_id, task_id)).fetchall()
+            for row in rows:
+                self.db.execute("UPDATE chat_messages SET state='delivered', started=?, finished=? "
+                                'WHERE device_id=? AND message_id=?',
+                                (time.time(), time.time(), device_id, row['message_id']))
+            return [self._task_view(row) for row in rows]
+
+    def requeue_steers(self, device_id, task_id):
+        """The running turn ended before undelivered redirects reached it: queue them as tasks."""
+        with self.lock, self.db:
+            rows = self.db.execute(
+                "SELECT message_id FROM chat_messages WHERE device_id=? AND state='steer' AND steered_into=?",
+                (device_id, task_id)).fetchall()
+            for row in rows:
+                self.db.execute("UPDATE chat_messages SET state='queued', steered_into=NULL "
+                                'WHERE device_id=? AND message_id=?', (device_id, row['message_id']))
+                self._task_event_locked(device_id, row['message_id'], 'queued')
+            return len(rows)
+
+    def unsteer(self, device_id, message_id):
+        with self.lock, self.db:
+            self.db.execute("UPDATE chat_messages SET state='queued', steered_into=NULL, started=NULL, finished=NULL "
+                            'WHERE device_id=? AND message_id=?', (device_id, message_id))
+            self._task_event_locked(device_id, message_id, 'queued')
+
+    def room_stop(self, device_id, task_id):
+        """Stop a task. Queued: it never runs. Running: no further Blender work is accepted for it."""
+        with self.lock, self.db:
+            row = self.db.execute('SELECT * FROM chat_messages WHERE device_id=? AND message_id=?',
+                                  (device_id, task_id)).fetchone()
+            if row is None:
+                raise ValueError('task_not_found')
+            if row['state'] in ('queued', 'steer'):
+                self.db.execute("UPDATE chat_messages SET state='stopped', stop_requested=?, finished=? "
+                                'WHERE device_id=? AND message_id=?', (time.time(), time.time(), device_id, task_id))
+                self._task_event_locked(device_id, task_id, 'stopped')
+                return 'stopped'
+            if row['state'] != 'running':
+                return row['state']
+            self.db.execute("UPDATE chat_messages SET state='stopping', stop_requested=? "
+                            'WHERE device_id=? AND message_id=?', (time.time(), device_id, task_id))
+            self._task_event_locked(device_id, task_id, 'stopping')
+            # Jobs this task queued but the device has not taken never run.
+            for job in self.db.execute("SELECT * FROM jobs WHERE device_id=? AND task_id=? AND state='queued'",
+                                       (device_id, task_id)).fetchall():
+                self.db.execute("UPDATE jobs SET state='cancelled' WHERE job_id=? AND state='queued'",
+                                (job['job_id'],))
+                self._job_entry(device_id, job, 'cancelled',
+                                f"{job['operation']} {job['job_id']} cancelled by stop before delivery; it never ran",
+                                state='cancelled')
+                self._end_job_lease(job, 'task stopped')
+            return 'stopping'
+
+    def task(self, device_id, task_id):
+        with self.lock:
+            row = self.db.execute('SELECT * FROM chat_messages WHERE device_id=? AND message_id=?',
+                                  (device_id, task_id)).fetchone()
+        return self._task_view(row) if row else None
+
+    def tasks(self, device_id, limit=20, states=None):
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT * FROM chat_messages WHERE device_id=? AND state NOT IN ('steer','delivered') "
+                'ORDER BY created DESC LIMIT ?', (device_id, limit)).fetchall()
+        views = [self._task_view(row) for row in rows]
+        return [v for v in views if states is None or v['state'] in states]
+
+    def room_events(self, device_id, cursor, limit=100):
+        with self.lock:
+            rows = self.db.execute(
+                'SELECT seq,message_id,type,text,created,agent_id,payload FROM chat_events '
+                'WHERE device_id=? AND seq>? ORDER BY seq LIMIT ?', (device_id, cursor, limit)).fetchall()
+        events = []
+        for row in rows:
+            event = {'seq': row['seq'], 'task_id': row['message_id'], 'type': row['type'], 'text': row['text'],
+                     'time': row['created'], 'agent_id': row['agent_id']}
+            if row['payload']:
+                try:
+                    event['payload'] = json.loads(row['payload'])
+                except ValueError:
+                    pass
+            events.append(event)
+        return events
+
+    def chat_events_issued(self):
+        row = self.db.execute("SELECT seq FROM sqlite_sequence WHERE name='chat_events'").fetchone()
+        return int(row[0]) if row else 0
+
+    def ledger_issued(self):
+        row = self.db.execute("SELECT seq FROM sqlite_sequence WHERE name='ledger'").fetchone()
+        return int(row[0]) if row else 0
+
+    def room_ledger(self, device_id, after_seq, limit=100, before_seq=None):
+        """Ledger rows joined with the job they reference, for GHOSTroom activity."""
+        with self.lock:
+            rows = self.db.execute(
+                'SELECT l.seq, l.entry, l.created, j.operation, j.arguments, j.task_id, j.state AS job_state '
+                'FROM ledger l LEFT JOIN jobs j ON j.job_id = l.job_id '
+                'WHERE l.device_id=? AND l.seq>? AND l.seq<? ORDER BY l.seq LIMIT ?',
+                (device_id, after_seq, before_seq if before_seq is not None else 2 ** 62, limit)).fetchall()
+        return rows
+
+    def post_note(self, device_id, participant_id, category, summary, rationale=None, handoff=None):
+        """An agent's structured finding, decision, review, handoff or question for everyone."""
+        if category not in NOTE_CATEGORIES:
+            raise ValueError('invalid_note_category')
+        if not isinstance(summary, str) or not summary.strip() or len(summary) > 2000:
+            raise ValueError('invalid_note_summary')
+        if category == 'decision' and not (isinstance(rationale, str) and rationale.strip()):
+            raise ValueError('decision_requires_rationale')
+        with self.lock, self.db:
+            entry_id = self._ledger(device_id, participant_id, category, summary.strip(),
+                                    rationale=rationale.strip()[:4000] if isinstance(rationale, str) else None,
+                                    handoff=handoff)
+            task = self._running_task(device_id, participant_id)
+            self._chat_event_locked(
+                device_id, task['message_id'] if task is not None else None, 'note', summary.strip(),
+                agent_id=task['agent_id'] if task is not None else participant_id, limit=ROOM_TEXT,
+                payload={'category': category, 'rationale': rationale, 'handoff': handoff,
+                         'participant_id': participant_id, 'entry_id': entry_id})
+        return {'entry_id': entry_id, 'category': category}
+
+    # ------------------------------------------------------------------ artifacts
+
+    def _capture_artifact(self, device_id, row, value):
+        if not isinstance(value, dict) or value.get('mime_type') != 'image/png' or not value.get('data'):
+            return None
+        try:
+            data = base64.b64decode(value['data'], validate=True)
+        except (ValueError, TypeError):
+            return None
+        kind = 'render' if value.get('source') == 'render_result' else 'screenshot'
+        try:
+            return self._store_artifact(device_id, row['participant_id'] or LEGACY, kind, 'image/png', data,
+                                        value.get('width'), value.get('height'), job_id=row['job_id'],
+                                        title='Render result' if kind == 'render' else 'Viewport capture')
+        except ValueError:
+            # Evidence storage must never block recording the job's real outcome.
+            return None
+
+    def _store_artifact(self, device_id, participant_id, kind, media_type, data, width, height, job_id=None,
+                        title=None, artifact_id=None):
+        if media_type not in IMAGE_TYPES or not data or len(data) > ARTIFACT_MAX_BYTES:
+            raise ValueError('invalid_artifact')
+        if type(width) is not int or type(height) is not int or width < 1 or height < 1:
+            raise ValueError('invalid_artifact_size')
+        artifact_id = artifact_id or 'art' + uuid.uuid4().hex
+        self.db.execute(
+            'INSERT OR IGNORE INTO artifacts(artifact_id,device_id,created,type,media_type,sha256,bytes,width,'
+            'height,participant_id,job_id,title,data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            (artifact_id, device_id, time.time(), kind, media_type, hashlib.sha256(data).hexdigest(), len(data),
+             width, height, participant_id, job_id, (title or kind)[:200], data))
+        # Keep bytes for the most recent artifacts; metadata and digests stay forever.
+        self.db.execute(
+            'UPDATE artifacts SET data=NULL WHERE device_id=? AND data IS NOT NULL AND artifact_id NOT IN '
+            '(SELECT artifact_id FROM artifacts WHERE device_id=? ORDER BY created DESC LIMIT ?)',
+            (device_id, device_id, ARTIFACT_KEEP))
+        return artifact_id
+
+    def store_artifact(self, device_id, participant_id, kind, media_type, data, width, height, title=None,
+                       artifact_id=None):
+        with self.lock, self.db:
+            return self._store_artifact(device_id, participant_id, kind, media_type, data, width, height,
+                                        title=title, artifact_id=artifact_id)
+
+    def artifact(self, device_id, artifact_id, with_data=False):
+        with self.lock:
+            row = self.db.execute('SELECT * FROM artifacts WHERE device_id=? AND artifact_id=?',
+                                  (device_id, artifact_id)).fetchone()
+        if row is None:
+            raise ValueError('artifact_not_found')
+        value = {'artifact_id': row['artifact_id'], 'type': row['type'], 'title': row['title'],
+                 'created_at': rfc3339(row['created']), 'origin': row['participant_id'], 'job_id': row['job_id'],
+                 'media': {'media_type': row['media_type'], 'sha256': row['sha256'], 'bytes': row['bytes'],
+                           'width': row['width'], 'height': row['height'],
+                           'uri': 'artifacts/' + row['artifact_id']},
+                 'available': row['data'] is not None}
+        if with_data and row['data'] is not None:
+            value['data'] = base64.b64encode(row['data']).decode()
+        return value
 
     def chat_thread_id(self, device_id):
         with self.lock:

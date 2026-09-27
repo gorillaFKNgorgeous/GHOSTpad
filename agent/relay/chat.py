@@ -1,10 +1,17 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Durable single-owner Codex worker for GhostBlender's embedded chat."""
+"""Codex agent adapter for the Agent Router, and the legacy ChatWorker entry point.
 
+Codex is one agent implementation, not the relay's brain: CodexAdapter plugs
+into router.AgentRouter like any other provider.
+"""
+
+import base64
 import os
 from pathlib import Path
 import threading
-import time
+
+from router import AgentAdapter, AgentError, AgentRouter
+from store import failure
 
 
 DEVELOPER_INSTRUCTIONS = """You are the embedded GhostBlender assistant running for one trusted owner.
@@ -12,8 +19,17 @@ For Blender work, use the ghostblender MCP server and its live scene evidence ra
 Start with status and inspect_scene when the task depends on scene state. Keep edits in small steps,
 poll job_result before dependent work, capture actual images when visual verification matters, and
 never claim an edit succeeded without checking the result. Do not use shell commands or inspect the
-relay filesystem. The final reply is displayed in a narrow iPad sidebar, so keep it concise and
-state what changed or what the user must do next.
+relay filesystem.
+
+You work inside GHOSTroom, the native AI workspace of GHOSTpad. The user watches your real tool calls
+as live activity, so you do not need to narrate each operation. Start every execute_python code with
+one short comment line naming the step (for example "# Shape the wheel arches"); GHOSTroom shows it
+as the current phase. Use capture for visual checks: captures appear to the user as evidence.
+Other agents and the user share this workspace: read_ledger and workspace_brief show what everyone
+did; post_note records decisions (with rationale), reviews, handoffs and open questions for them.
+If a tool call is rejected with stopped_by_user, stop working and reply briefly. If it is rejected
+with read_only_role, do not try to change Blender. Final replies may use short paragraphs and lists;
+say what changed, what you verified and what the user may want to do next.
 """
 
 
@@ -46,48 +62,43 @@ trust_level = "trusted"
     return codex_home, workdir
 
 
-class ChatWorker:
-    """Process queued user messages exactly once, serially, in one Codex thread."""
+class CodexAdapter(AgentAdapter):
+    """OpenAI Codex through the openai-codex SDK, with the GhostBlender MCP server."""
 
-    def __init__(self, store, device_id, mcp_url, poll_interval=0.25):
-        self.store = store
-        self.device_id = device_id
-        self.mcp_url = mcp_url
-        self.poll_interval = poll_interval
-        self._stop = threading.Event()
-        self._worker = None
+    agent_id = 'codex'
+    provider = 'codex'
+    display_name = 'Codex'
+    participant_id = 'codex-embedded'
+    auth_method = 'device_code'
+    capabilities = ('discuss', 'inspect', 'plan', 'execute', 'capture', 'vision', 'review', 'teach',
+                    'long_running')
+    can_steer = True
+
+    def __init__(self):
         self._codex = None
         self._thread = None
         self._sdk = None
         self._workdir = None
+        self._handle = None
+        self._lock = threading.RLock()
 
-    def start(self):
-        if self._worker and self._worker.is_alive():
-            return
-        _, self._workdir = prepare_codex_environment(self.mcp_url)
-        self._stop.clear()
-        self._worker = threading.Thread(
-            target=self._run,
-            name="ghostblender-codex",
-            daemon=True,
-        )
-        self._worker.start()
+    def configure(self, store, device_id, mcp_url):
+        super().configure(store, device_id, mcp_url)
+        _, self._workdir = prepare_codex_environment(mcp_url)
+
+    # -- SDK lifecycle, unchanged from the proven embedded worker ------------
 
     def close(self):
-        self._stop.set()
-        if self._worker:
-            self._worker.join(timeout=2.0)
-        self._close_codex()
-
-    def _close_codex(self):
-        if self._codex is not None:
-            try:
-                self._codex.close()
-            except Exception:
-                pass
-        self._codex = None
-        self._thread = None
-        self._sdk = None
+        with self._lock:
+            if self._codex is not None:
+                try:
+                    self._codex.close()
+                except Exception:
+                    pass
+            self._codex = None
+            self._thread = None
+            self._sdk = None
+            self._handle = None
 
     def _open_codex(self):
         if self._codex is not None:
@@ -98,7 +109,9 @@ class ChatWorker:
         account = codex.account()
         if getattr(account, "account", None) is None:
             codex.close()
-            raise RuntimeError("codex_not_signed_in")
+            raise AgentError(failure('auth_expired', 'agent_provider',
+                                     'Codex is not signed in on the relay (codex_not_signed_in).',
+                                     False, 'after_user_action', agent_id=self.agent_id))
         self._codex = codex
         self._sdk = (ApprovalMode, Sandbox)
         return codex
@@ -114,10 +127,14 @@ class ChatWorker:
         effort = os.environ.get("CODEX_REASONING_EFFORT", "medium").strip()
         if effort:
             options["config"] = {"model_reasoning_effort": effort}
-        model = os.environ.get("CODEX_MODEL", "").strip()
+        model = self.model()
         if model:
             options["model"] = model
         return options
+
+    @staticmethod
+    def model():
+        return os.environ.get("CODEX_MODEL", "").strip()
 
     def _ensure_thread(self):
         if self._thread is not None:
@@ -131,73 +148,142 @@ class ChatWorker:
                 return self._thread
             except Exception:
                 # Resuming has not started the user's new turn, so falling back to
-                # a new conversation cannot duplicate Blender work.
+                # a new conversation cannot duplicate Blender work. The shared
+                # ledger brief carries the project context into the new thread.
                 self.store.chat_set_thread_id(self.device_id, None)
-                self._close_codex()
+                self.close()
                 codex = self._open_codex()
                 options = self._thread_options()
         self._thread = codex.thread_start(**options)
         self.store.chat_set_thread_id(self.device_id, self._thread.id)
         return self._thread
 
-    def _run_turn(self, text):
-        thread = self._ensure_thread()
-        approval_mode, sandbox = self._sdk
-        result = thread.run(
-            text,
-            approval_mode=approval_mode.deny_all,
-            sandbox=sandbox.read_only,
-            cwd=str(self._workdir),
-        )
-        final = getattr(result, "final_response", None)
-        if not isinstance(final, str) or not final.strip():
-            raise RuntimeError("codex_returned_no_final_response")
-        return final.strip()[:2000]
+    # -- AgentAdapter ---------------------------------------------------------
 
-    def _run(self):
-        while not self._stop.is_set():
-            message = self.store.chat_claim(self.device_id)
-            if message is None:
-                self._stop.wait(self.poll_interval)
-                continue
-
-            message_id = message["id"]
-            self.store.chat_event(
-                self.device_id,
-                message_id,
-                "status",
-                "AI working",
-            )
+    def probe(self):
+        try:
+            import openai_codex  # noqa: F401
+        except ImportError:
+            return {'availability': 'unavailable', 'auth': 'unknown', 'quota': 'unknown',
+                    'reason': failure('provider_unavailable', 'agent_provider',
+                                      'The openai-codex SDK is not installed on the relay.', False,
+                                      'switch_agent', agent_id=self.agent_id)}
+        with self._lock:
+            if self._handle is not None:
+                return {'availability': 'available', 'auth': 'signed_in', 'quota': 'unknown',
+                        'model': self.model() or None}
             try:
-                final = self._run_turn(message["text"])
-            except RuntimeError as exc:
-                message = str(exc).replace("\n", " ")[:240]
-                print(
-                    "ghostblender_chat_runtime_error="
-                    + type(exc).__name__
-                    + ":"
-                    + message,
-                    flush=True,
-                )
-                self._close_codex()
-                if str(exc) == "codex_not_signed_in":
-                    text = "AI sign-in required on the relay before embedded chat can run."
-                else:
-                    text = (
-                        "AI turn failed. It may have changed Blender before the failure; "
-                        "inspect the scene before retrying."
-                    )
-                self.store.chat_fail(self.device_id, message_id, text)
-            except Exception as exc:
-                self._close_codex()
-                print(
-                    "ghostblender_chat_error=" + type(exc).__name__,
-                    flush=True,
-                )
-                self.store.chat_fail(
-                    self.device_id,
-                    message_id,
-                    "AI backend error. Inspect the scene before retrying, then check relay logs.",
-                )
+                self._open_codex()
+            except AgentError as exc:
+                return {'availability': 'unavailable', 'auth': 'signed_out', 'quota': 'unknown',
+                        'reason': exc.failure}
+        return {'availability': 'available', 'auth': 'signed_in', 'quota': 'unknown',
+                'model': self.model() or None}
+
+    def _input(self, turn):
+        if not turn.images:
+            return turn.prompt
+        try:
+            from openai_codex import ImageInput, TextInput
+        except ImportError:
+            return turn.prompt
+        items = [TextInput(turn.prompt)]
+        for image in turn.images:
+            items.append(ImageInput(f"data:{image['media_type']};base64,{image['data']}"))
+        return items
+
+    def run_turn(self, turn):
+        with self._lock:
+            thread = self._ensure_thread()
+            approval_mode, sandbox = self._sdk
+            options = dict(approval_mode=approval_mode.deny_all, sandbox=sandbox.read_only,
+                           cwd=str(self._workdir))
+            starter = getattr(thread, 'turn', None)
+            if starter is None:
+                handle = None
             else:
-                self.store.chat_complete(self.device_id, message_id, final)
+                handle = starter(self._input(turn), **options)
+                self._handle = handle
+        try:
+            if handle is None:
+                result = thread.run(turn.prompt, **options)
+                final = getattr(result, "final_response", None)
+            else:
+                final = self._consume(handle, turn)
+        except AgentError:
+            self.close()
+            raise
+        except Exception:
+            self.close()
+            raise
+        finally:
+            with self._lock:
+                self._handle = None
+        if turn.stop_requested:
+            return final.strip()[:16000] if isinstance(final, str) and final.strip() else 'Stopped.'
+        if not isinstance(final, str) or not final.strip():
+            raise AgentError(failure('provider_unavailable', 'agent_provider',
+                                     'Codex returned no final response (codex_returned_no_final_response).',
+                                     True, 'after_inspect', agent_id=self.agent_id))
+        return final.strip()[:16000]
+
+    def _consume(self, handle, turn):
+        """Stream the turn: commentary becomes visible narration, the final answer is returned."""
+        final, fallback, status, error = None, None, None, None
+        for event in handle.stream():
+            payload = getattr(event, 'payload', None)
+            item = getattr(payload, 'item', None)
+            item = getattr(item, 'root', item)
+            if getattr(event, 'method', '') == 'item/completed' and getattr(item, 'type', None) == 'agentMessage':
+                phase = getattr(getattr(item, 'phase', None), 'value', getattr(item, 'phase', None))
+                text = getattr(item, 'text', '') or ''
+                if phase == 'final_answer':
+                    final = text
+                elif phase == 'commentary':
+                    turn.narrate(text)
+                    fallback = text
+                else:
+                    fallback = text
+            completed = getattr(payload, 'turn', None)
+            if getattr(event, 'method', '') == 'turn/completed' and completed is not None:
+                status = getattr(getattr(completed, 'status', None), 'value', getattr(completed, 'status', None))
+                error = getattr(getattr(completed, 'error', None), 'message', None)
+        if status == 'failed':
+            raise RuntimeError(error or 'turn failed')
+        return final or fallback
+
+    def steer(self, text):
+        with self._lock:
+            handle = self._handle
+        if handle is None:
+            raise RuntimeError('no_running_turn')
+        handle.steer(text)
+
+    def interrupt(self):
+        with self._lock:
+            handle = self._handle
+        if handle is not None:
+            handle.interrupt()
+
+
+class ChatWorker:
+    """Legacy entry point: an Agent Router with only the Codex adapter.
+
+    Kept so existing deployments and tests start the embedded agent the same
+    way. New deployments build an AgentRouter with every configured adapter.
+    """
+
+    def __init__(self, store, device_id, mcp_url, poll_interval=0.25):
+        self.router = AgentRouter(store, device_id, 'http://127.0.0.1', poll_interval=poll_interval)
+        self.adapter = CodexAdapter()
+        self.mcp_url = mcp_url
+        self._registered = False
+
+    def start(self):
+        if not self._registered:
+            self.router.register(self.adapter, mcp_url=self.mcp_url)
+            self._registered = True
+        self.router.start()
+
+    def close(self):
+        self.router.close()

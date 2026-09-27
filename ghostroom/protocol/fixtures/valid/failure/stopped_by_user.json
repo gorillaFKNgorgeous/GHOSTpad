@@ -1,0 +1,7 @@
+{
+  "code": "stopped_by_user",
+  "layer": "router",
+  "message": "The user stopped this task; no further Blender work is accepted for it.",
+  "mutation_possible": false,
+  "retry": "after_user_action"
+}

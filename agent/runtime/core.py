@@ -92,7 +92,23 @@ class Runtime:
                 'blender_version': self.bpy.app.version_string,
                 'python_version': sys.version.split()[0],
                 'scene_name': self.bpy.context.scene.name,
-                'native': self.native.status(), 'bridge_version': '0.1.0'}
+                'native': self.native.status(), 'bridge_version': '0.1.0',
+                'observed': self.observed()}
+
+    def observed(self):
+        """What the person at the iPad is doing, so a teaching agent can follow along (target.md §19)."""
+        try:
+            context = self.bpy.context
+            layer = context.view_layer
+            active = layer.objects.active if layer else None
+            return {'mode': context.mode, 'active': active.name if active else None,
+                    'selected': [o.name for o in context.selected_objects][:12],
+                    'object_count': len(context.scene.objects), 'frame': context.scene.frame_current,
+                    'unsaved_changes': bool(self.bpy.data.is_dirty),
+                    'file': Path(self.bpy.data.filepath).name if self.bpy.data.filepath else None,
+                    'rendering': bool(self.bpy.app.is_job_running('RENDER'))}
+        except Exception:
+            return None
 
     def acknowledge(self, job_id):
         if self.outbox and self.outbox['job_id'] == job_id:

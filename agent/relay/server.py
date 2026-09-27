@@ -17,7 +17,8 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from oauth import OAuth, same
-from store import LEGACY, OPERATIONS, RelayFailure, Store
+from room import Room, workspace_brief
+from store import LEGACY, OPERATIONS, RelayFailure, Store, task_title
 
 VERSIONS = ('2025-11-25', '2025-06-18', '2025-03-26')
 MAX_BODY = 3 * 1024 * 1024
@@ -36,7 +37,11 @@ execute_python needs the scene edit lease: pass lease_id from acquire_lease, or
 the relay takes a short implicit lease for that one job when the scene is free.
 lease_conflict means another participant is editing; wait or coordinate, do not
 retry in a loop. Inspection needs no lease. write_script changes persistent code
-and is serialized separately. read_ledger shows what every participant did.'''
+and is serialized separately. read_ledger shows what every participant did.
+workspace_brief summarises the shared GHOSTroom workspace for joining or resuming
+work; post_note leaves decisions, reviews, handoffs and questions for everyone.
+Start execute_python code with a one-line comment naming the step: GHOSTroom
+shows it to the user as the current activity.'''
 
 
 def schema(properties=None, required=None):
@@ -90,6 +95,27 @@ def tools_list():
          'description': 'Release a scene edit lease you hold.',
          'inputSchema': schema({'lease_id': string}, ['lease_id']),
          'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'idempotentHint': True}},
+        {'name': 'workspace_brief',
+         'description': 'Agent-neutral summary of the shared GHOSTroom workspace: agents and their state, recent '
+                        'user instructions, tasks, activity, notes and unresolved or uncertain operations. Read it '
+                        'when joining or resuming work instead of relying on memory.',
+         'inputSchema': schema({'since_seq': {'type':'integer','minimum':0}}),
+         'annotations': {'readOnlyHint': True, 'idempotentHint': True}},
+        {'name': 'read_artifact',
+         'description': 'Return a stored evidence or reference image (captures, renders, user attachments) by '
+                        'artifact_id, as image content.',
+         'inputSchema': schema({'artifact_id': string}, ['artifact_id']),
+         'annotations': {'readOnlyHint': True, 'idempotentHint': True}},
+        {'name': 'post_note',
+         'description': 'Record a structured note for the user and every other agent in the shared ledger: '
+                        'decision (requires rationale), review, handoff, question, summary or warning. Shown in '
+                        'GHOSTroom. Use for findings, review verdicts, handoffs and open questions. Set "to" to an '
+                        'agent_id (see workspace_brief) to address it; the user can forward it to that agent.',
+         'inputSchema': schema({'category': {'type':'string','enum':['decision','review','handoff','question',
+                                                                      'summary','warning']},
+                                'summary': string, 'rationale': string,
+                                'next_steps': {'type':'string'}, 'to': string}, ['category', 'summary']),
+         'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'idempotentHint': False}},
         {'name': 'read_ledger',
          'description': 'Read the shared workspace ledger: requests, outcomes, leases and failures from every '
                         'participant, oldest first. Pass the returned cursor as after_seq to continue.',
@@ -119,6 +145,13 @@ class App:
         self.device_id, self.device_token, self.agent_token = device_id, device_token, agent_token
         self.store = Store(db_path)
         self.oauth = OAuth(self.store, origin, client_id, client_secret, owner_key, redirects)
+        self.router = None
+        self.room = Room(self.store, device_id)
+
+    def attach_router(self, router):
+        """Enable embedded agents: GHOSTroom tasks are routed to the router's adapters."""
+        self.router = router
+        self.room.router = router
 
     def call(self, name, args, participant=LEGACY):
         definition = next((t for t in TOOLS if t['name'] == name), None)
@@ -155,12 +188,42 @@ class App:
                                             args.get('duration_seconds', 120))
         if name == 'release_lease':
             return self.store.release_lease(self.device_id, participant, args['lease_id'])
+        if name == 'workspace_brief':
+            return self.brief(args.get('since_seq', 0))
+        if name == 'read_artifact':
+            return self.store.artifact(self.device_id, args['artifact_id'], with_data=True)
+        if name == 'post_note':
+            handoff = None
+            if args['category'] == 'handoff':
+                handoff = {'from': participant, 'state_of_work': args['summary'][:4000]}
+            if args.get('to'):
+                if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}', args['to']):
+                    raise ValueError('invalid_note_recipient')
+                handoff = handoff or {'from': participant, 'state_of_work': args['summary'][:4000]}
+                handoff['to'] = args['to']
+            if handoff and args.get('next_steps'):
+                handoff['next_steps'] = [args['next_steps'][:1000]]
+            return self.store.post_note(self.device_id, participant, args['category'], args['summary'],
+                                        args.get('rationale'), handoff)
         if name == 'read_ledger':
             return self.store.read_ledger(self.device_id, args.get('after_seq', 0), args.get('limit', 50),
                                           args.get('stream_id'))
         args = dict(args)
         return self.store.submit(self.device_id, name, args_without_meta(args), args['request_id'], args['scene_id'],
                                  participant, args.get('lease_id'))
+
+    def brief(self, since_seq=0):
+        router = getattr(self, 'router', None)
+        tasks = self.store.tasks(self.device_id, 8)
+        return {
+            'agents': router.describe() if router else [],
+            'tasks': [{'task_id': t['task_id'], 'agent_id': t['agent_id'], 'state': t['state'],
+                       'title': task_title(t['text']), 'mode': t['mode'], 'role': t['role']} for t in tasks],
+            'leases': [lease for lease in self.store.status(self.device_id).get('leases', [])
+                       if not lease['implicit']],
+            'brief': workspace_brief(self.store, self.device_id, since_seq, max_chars=6000)
+                     or 'Nothing has happened in this workspace yet.',
+        }
 
     def rpc(self, message, participant=LEGACY):
         if not isinstance(message, dict) or message.get('jsonrpc') != '2.0' or not isinstance(message.get('method'), str):
@@ -191,7 +254,10 @@ class App:
             try:
                 value = self.call(params.get('name'), params.get('arguments', {}), participant)
                 image = None
-                if params.get('name') == 'job_result' and (value.get('result') or {}).get('ok'):
+                if params.get('name') == 'read_artifact' and value.get('data'):
+                    image = {'type':'image','mimeType':value['media']['media_type'],'data':value['data']}
+                    value = {k:v for k,v in value.items() if k != 'data'}
+                elif params.get('name') == 'job_result' and (value.get('result') or {}).get('ok'):
                     payload = value['result'].get('value')
                     if isinstance(payload, dict) and payload.get('mime_type') == 'image/png' and payload.get('data'):
                         image = {'type':'image','mimeType':'image/png','data':payload['data']}
@@ -310,6 +376,13 @@ class Handler(BaseHTTPRequestHandler):
             reply = app.store.exchange(app.device_id, body['heartbeat'], body.get('completed'))
             if getattr(app, 'chat', None) is not None and 'chat' in body:
                 reply['chat'] = app.store.chat_exchange(app.device_id, body['chat'])
+            if 'room' in body:
+                # GHOSTroom rides the same authenticated exchange. A bad room payload
+                # must never block the Blender jobs this exchange also carries.
+                try:
+                    reply['room'] = app.room.exchange(body['room'])
+                except (ValueError, TypeError, KeyError) as exc:
+                    reply['room'] = {'v': 1, 'error': str(exc)[:160]}
             self.reply(200, reply)
         elif path.startswith('/mcp/p/'):
             # Participant capability: the unguessable path segment is the credential

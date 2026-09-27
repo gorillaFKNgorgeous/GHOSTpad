@@ -1,6 +1,7 @@
 FROM python:3.13-slim
 WORKDIR /app
-COPY server.py simple_server.py store.py oauth.py chat.py chat_login.py participants.py ./
+COPY server.py simple_server.py store.py oauth.py chat.py chat_login.py participants.py \
+     router.py room.py claude_agent.py ./
 RUN pip install --no-cache-dir 'openai-codex==0.156.1' \
     && useradd --system --uid 10001 ghostbridge \
     && mkdir /data \

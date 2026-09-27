@@ -1,0 +1,7 @@
+{
+  "code": "read_only_role",
+  "layer": "router",
+  "message": "This task is reviewer/explain and may only inspect; ask the user before changing Blender.",
+  "mutation_possible": false,
+  "retry": "after_user_action"
+}

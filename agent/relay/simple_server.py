@@ -14,7 +14,29 @@ import os
 from pathlib import Path
 
 import server
-from chat import ChatWorker
+from chat import CodexAdapter
+from router import AgentRouter
+
+
+def build_router(app, port):
+    """Agent Router with every configured adapter. None of them is required.
+
+    GHOSTROOM_AGENTS lists adapters in picker order (default: codex,claude). An
+    adapter whose provider is not signed in or configured still appears, with
+    its unavailability and reason, so GHOSTroom can say so before a turn fails.
+    """
+    router = AgentRouter(app.store, app.device_id, f'http://127.0.0.1:{port}',
+                         default_agent=os.environ.get('GHOSTROOM_DEFAULT_AGENT') or None)
+    names = [n.strip() for n in os.environ.get('GHOSTROOM_AGENTS', 'codex,claude').split(',') if n.strip()]
+    for name in names:
+        if name == 'codex':
+            router.register(CodexAdapter())
+        elif name == 'claude':
+            from claude_agent import ClaudeAdapter
+            router.register(ClaudeAdapter())
+        else:
+            print('ghostroom_unknown_agent=' + name[:40], flush=True)
+    return router
 
 
 # Developer-mode apps configured as "No Authentication" must not advertise an
@@ -59,20 +81,16 @@ if __name__ == '__main__':
         (os.environ.get('BIND_HOST', '127.0.0.1'), port),
         app,
     )
-    # The embedded worker is its own participant. Its capability is regenerated
+    # Each embedded agent is its own participant. Its capability is regenerated
     # at every start and only its digest is stored, so it never needs rotating.
     # The shared legacy capability behind Caddy keeps mapping to
-    # legacy-unattributed.
-    worker_capability = app.store.ensure_participant_capability(
-        'codex-embedded', 'agent', 'Codex (embedded chat)', provider='codex')
-    app.chat = ChatWorker(
-        app.store,
-        app.device_id,
-        f'http://127.0.0.1:{port}/mcp/p/{worker_capability}',
-    )
-    app.chat.start()
+    # legacy-unattributed. app.chat keeps the N-panel chat protocol enabled.
+    router = build_router(app, port)
+    app.attach_router(router)
+    app.chat = router
+    router.start()
     try:
         httpd.serve_forever()
     finally:
-        app.chat.close()
+        router.close()
         httpd.server_close()

@@ -28,7 +28,9 @@ jobs:
           python -m py_compile
           agent/relay/server.py agent/relay/simple_server.py agent/relay/store.py
           agent/relay/chat.py agent/relay/chat_login.py agent/relay/participants.py
+          agent/relay/router.py agent/relay/room.py agent/relay/claude_agent.py
           agent/runtime/__init__.py agent/runtime/core.py agent/runtime/insight.py
+          agent/runtime/ghostroom.py
       - run: python -m unittest discover -s agent/tests -v
       - name: Validate GHOSTroom protocol schemas and fixtures
         run: |
@@ -43,12 +45,53 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Compile native transport against iOS SDK
+      - name: Compile native transport and GHOSTroom against iOS SDK
         shell: bash
         run: |
           sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
           sdk_path="$(xcrun --sdk iphoneos --show-sdk-path)"
           python_include="$(python3 -c 'import sysconfig; print(sysconfig.get_path("include"))')"
-          xcrun --sdk iphoneos clang++ -fsyntax-only -std=c++17 -fobjc-arc \
-            -target arm64-apple-ios26.0 -isysroot "$sdk_path" -I "$python_include" \
-            agent/native/ghostbridge_transport.mm
+          for source in agent/native/ghostbridge_transport.mm agent/native/ghostroom_ui.mm; do
+            xcrun --sdk iphoneos clang++ -fsyntax-only -std=c++17 -fobjc-arc -Wall \
+              -Wno-unused-function \
+              -target arm64-apple-ios26.0 -isysroot "$sdk_path" -I "$python_include" \
+              "$source"
+          done
+  ghostroom-simulator:
+    # Runs the native GHOSTroom workspace in an iPad simulator against snapshots
+    # produced by the real relay and GhostBlender presentation model, before any
+    # expensive IPA build.
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Produce real GHOSTroom snapshots
+        run: python3 agent/native/harness/make_snapshots.py build/harness
+      - name: Build the simulator harness app
+        shell: bash
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          app=build/harness/GHOSTroomHarness.app
+          mkdir -p "$app"
+          sdk_path="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator clang++ -std=c++17 -fobjc-arc -Wall -Wno-unused-function \
+            -DGHOSTROOM_HARNESS -target arm64-apple-ios17.0-simulator -isysroot "$sdk_path" \
+            agent/native/ghostroom_ui.mm agent/native/harness/ghostroom_harness.mm \
+            -framework UIKit -framework Foundation -framework PhotosUI -framework UniformTypeIdentifiers \
+            -framework CoreGraphics -framework QuartzCore \
+            -o "$app/GHOSTroomHarness"
+          cp agent/native/harness/Info.plist "$app/Info.plist"
+          cp -R build/harness/snapshots build/harness/evidence "$app/"
+          codesign --force --sign - "$app"
+      - name: Run GHOSTroom in the iPad simulator
+        run: python3 agent/native/harness/run_simulator.py build/harness
+      - name: Upload GHOSTroom simulator screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghostroom-simulator-screenshots
+          path: build/harness/screenshots
+          if-no-files-found: warn

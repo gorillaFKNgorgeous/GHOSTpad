@@ -97,3 +97,21 @@ Read `docs/ghostroom/CURRENT-SHAPES.md` (today), then
    logs.
 3. Should the live `ghostblender_insight.py` shim be removed before the next
    IPA ships the bundled `insight.py`? Running both would conflict (§7).
+
+## GHOSTroom native workspace (PR #6, branch `claude/ghostroom-native-interface-wwocyj`)
+
+Design and the full requirement-by-requirement status: [GHOSTROOM.md](GHOSTROOM.md).
+
+- [x] Agent Router (`agent/relay/router.py`): Codex is `CodexAdapter` (with interrupt/steer
+      and narration); Claude is an optional `ClaudeAdapter`; descriptors per `agent.schema.json`.
+- [x] Room exchange (`agent/relay/room.py`): tasks, controls (stop), artifact upload/fetch,
+      ledger-derived activity, workspace brief; new MCP tools `workspace_brief`,
+      `read_artifact`, `post_note`.
+- [x] Relay enforcement: `stopped_by_user`, `read_only_role` (added to `failure.schema.json`).
+- [x] GhostBlender runtime (`agent/runtime/ghostroom.py`): presentation model, context
+      attachments through read-only Runtime tools, crash-recovery cache, evidence store.
+- [x] Native UIKit workspace (`agent/native/ghostroom_ui.mm`), compiled into `bf_python` by
+      `scripts/apply-ios-agent-bridge.py`; `package-ipa.sh` verifies it is linked.
+- [x] CI: iOS SDK compile of both native files; iPad-simulator harness driving the real
+      native code with snapshots from the real relay/runtime.
+- [ ] Device acceptance on the next IPA; relay redeploy with the new files.

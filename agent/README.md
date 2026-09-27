@@ -26,7 +26,9 @@ Blender startup package. All scene access and Python execution occur in a
 persistent `bpy.app.timers` callback on Blender's main thread.
 
 Tools: `status`, `inspect_scene`, `execute_python`, `capture`, `diagnostics`,
-`list_scripts`, `read_script`, `write_script`, `job_result`, `cancel_job`.
+`list_scripts`, `read_script`, `write_script`, `job_result`, `cancel_job`,
+`acquire_lease`, `release_lease`, `read_ledger`, and for the shared GHOSTroom
+workspace `workspace_brief`, `read_artifact`, `post_note`.
 The model can inspect the actual scene, write and run Python, see resulting
 images and errors, then choose its next edit. The user specifies the creative
 or diagnostic goal; the agent chooses the Blender operations.
@@ -57,6 +59,32 @@ bounded reconnection backoff. iPadOS can suspend an inactive app. Keep Blender
 visible/active while the agent works (including an appropriate iPad multitasking
 layout). Deleting the app removes its local pairing and journal. A persistent
 connection does not keep a ChatGPT turn running indefinitely.
+
+## GHOSTroom (native AI workspace)
+
+GHOSTroom is another client of this same bridge, not a replacement for it.
+GhostBlender Simple keeps working unchanged. Every scene change still travels
+agent → GhostBlender MCP tools → relay job → `core.Runtime` on Blender's main thread.
+
+| layer | file | owns |
+| --- | --- | --- |
+| native shell | `native/ghostroom_ui.mm` | overlay, composer, keyboard, pickers, timeline, evidence viewer |
+| GhostBlender | `runtime/ghostroom.py` | context gathering (read-only tools), presentation model, local recovery cache |
+| relay / router | `relay/router.py`, `relay/room.py`, `relay/chat.py`, `relay/claude_agent.py` | agents, tasks, stop/steer, room exchange, workspace brief |
+| shared state | `relay/store.py` | tasks, room events, artifacts, Shared Workspace Ledger, leases |
+
+Open GHOSTroom with the floating pill, ⌘⇧G, or **Open GHOSTroom** in the
+GhostBlender N-panel. The design and requirement status are recorded in
+[docs/ghostroom/GHOSTROOM.md](../docs/ghostroom/GHOSTROOM.md).
+
+Relay settings for the Agent Router (all optional):
+
+| setting | meaning |
+| --- | --- |
+| `GHOSTROOM_AGENTS` | Adapters in picker order, default `codex,claude`. Unconfigured ones are listed as unavailable, with the reason. |
+| `GHOSTROOM_DEFAULT_AGENT` | Agent for N-panel chat and messages that name none (default: first listed) |
+| `CODEX_MODEL`, `CODEX_REASONING_EFFORT` | Codex adapter, unchanged |
+| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLAUDE_MAX_TOKENS` | Claude adapter; without a key Claude shows as not configured |
 
 ## Deployment
 

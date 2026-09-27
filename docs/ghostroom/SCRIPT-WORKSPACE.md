@@ -128,3 +128,19 @@ redraw that `execute_python` always does.
    anywhere the app can. It is covered by the scene edit lease. The ledger
    records it as a mutation, not as persistent code, since the relay cannot see
    what the code writes.
+
+## Probe result (2026-09-27, approved, read-only)
+
+`execute_python` job `c867d5bbf9d54300b038a40d3a9ceceb`, after an app restart:
+
+- Only startup dir: the signed app bundle's `scripts/startup` (`bl_app_templates_system`,
+  `bl_operators`, `bl_ui`, `ghostbridge`, two builtin `.py` files). No user startup dir.
+- Add-ons: only stock ones (`bl_pkg`, `cycles`, importers/exporters, `pose_library`).
+- No `insight` module loaded; the Conversation panel is **not** registered.
+- No text blocks marked Register; `load_post` handlers are Blender's and `ghostbridge._load_post`.
+- Workspace: `…/Library/Application Support/Blender/5.2/config/ghostbridge/scripts`.
+
+**Conclusion: nothing auto-loads the workspace.** `ghostblender_insight.py` was only ever
+registered by an explicit `execute_python` in a session, and is gone after restart. Replacing
+a workspace script cannot change the next launch by itself. The relay now records
+`device_auto_load: "none"` (`store.py` `SCRIPT_DEVICE_AUTO_LOAD`).

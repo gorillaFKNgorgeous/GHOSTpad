@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/legacy/job-view.schema.json",
+  "title": "Legacy: relay public job view (MCP job_result)",
+  "description": "agent/relay/store.py:182-185. result is the device result (agent/runtime/core.py:128-138).",
+  "type": "object",
+  "required": ["job_id", "state", "operation", "scene_id", "created_at", "result"],
+  "additionalProperties": false,
+  "properties": {
+    "job_id": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+    "state": { "enum": ["queued", "issued", "completed", "failed", "expired", "uncertain", "cancelled"] },
+    "operation": { "enum": ["inspect_scene", "execute_python", "capture", "diagnostics", "list_scripts", "read_script", "write_script"] },
+    "scene_id": { "type": "string" },
+    "created_at": { "type": "number" },
+    "result": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["ok", "value", "scene_id"],
+          "additionalProperties": false,
+          "properties": { "ok": { "const": true }, "value": true, "scene_id": { "type": "string" } }
+        },
+        {
+          "type": "object",
+          "required": ["ok", "error"],
+          "additionalProperties": false,
+          "properties": {
+            "ok": { "const": false },
+            "error": { "type": "string", "maxLength": 2000 },
+            "traceback": { "type": "string" },
+            "record": { "type": "object" }
+          }
+        }
+      ]
+    }
+  }
+}

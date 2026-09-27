@@ -23,10 +23,14 @@ A fresh session should be able to resume from this file alone.
 - [x] **Step 1**: `docs/ghostroom/CURRENT-SHAPES.md` documents job, result,
       journal, heartbeat and chat shapes with file:line refs, confirmed against
       live `status` + `diagnostics`. Includes the cursor audit (§7).
+- [x] **Step 2**: `ghostroom/protocol/` draft `ghostroom/0`: schemas for
+      common defs, event envelope (7 kinds), artifacts (7 types), agent
+      descriptor, edit lease, ledger entry, typed failures, plus legacy
+      protocol-1 schemas. `MAPPING.md` maps every CURRENT-SHAPES shape and
+      lists the gaps.
 
 ## Next
 
-- [ ] **Step 2**: `ghostroom/protocol/` JSON Schemas + `MAPPING.md`.
 - [ ] **Step 3**: fixtures, pytest, wire into `agent-checks.yml`.
 - Stop after Step 3 and report. No UI or relay work before approval.
 

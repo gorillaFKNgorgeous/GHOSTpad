@@ -114,7 +114,7 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(count,1)
 
         claimed=self.store.chat_claim('ipad')
-        self.assertEqual(claimed,message)
+        self.assertEqual({key: claimed[key] for key in ('id', 'text')}, message)
         self.assertIsNone(self.store.chat_claim('ipad'))
         self.store.chat_event('ipad',message['id'],'status','AI working')
         self.store.chat_complete('ipad',message['id'],'Done')
@@ -228,7 +228,9 @@ class ChatWorkerTests(unittest.TestCase):
             self.assertIsNotNone(reply)
             finals = [event for event in reply['events'] if event['type'] == 'final']
             self.assertEqual([event['text'] for event in finals], ['Cube moved and verified.'])
-            self.assertEqual([run[0] for run in runs], [message['text']])
+            self.assertEqual(len(runs), 1)
+            # The agent receives the user's text inside GHOSTroom's provider-neutral prompt.
+            self.assertTrue(runs[0][0].endswith(message['text']))
             self.assertEqual(self.store.chat_thread_id('ipad'), 'thr_embedded_test')
             self.assertEqual(len(starts), 1)
             self.assertEqual(starts[0]['approval_mode'], 'deny_all')

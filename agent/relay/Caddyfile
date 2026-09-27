@@ -14,6 +14,15 @@
             reverse_proxy relay:8080
         }
 
+        # Participant capabilities: /mcp/p/<capability>. The relay maps each one
+        # to its own participant_id and answers 404 for unknown or revoked ones.
+        # The shared capability above is unchanged and maps to
+        # legacy-unattributed.
+        @participant_mcp path /mcp/p/*
+        handle @participant_mcp {
+            reverse_proxy relay:8080
+        }
+
         # Block both the ordinary endpoint and every incorrect capability path.
         @blocked_mcp path /mcp /mcp/*
         handle @blocked_mcp {

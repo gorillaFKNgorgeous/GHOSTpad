@@ -129,6 +129,7 @@ def main(out):
     router = AgentRouter(store, 'ipad', 'http://127.0.0.1:1', poll_interval=0.01)
     builder = router.register(Builder())
     router.register(Reviewer())
+    router.probe_now()
     room = Room(store, 'ipad', router)
     native = Native()
     client = ghostroom.RoomClient(temp + '/device', native)

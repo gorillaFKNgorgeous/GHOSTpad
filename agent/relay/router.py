@@ -107,6 +107,7 @@ class AgentRouter:
         self.poll_interval = poll_interval
         self.adapters, self._threads, self._running = {}, {}, {}
         self._probes, self._stop = {}, threading.Event()
+        self._refreshing = set()
         self._lock = threading.RLock()
         self._default = default_agent
 
@@ -136,16 +137,38 @@ class AgentRouter:
     # ------------------------------------------------------------------ state
 
     def _probe(self, adapter, max_age=60.0):
+        """Cached provider state. Stale entries refresh in the background, never inline.
+
+        describe() runs inside the device exchange, and a probe can start a provider
+        runtime; the device must never wait for that.
+        """
         cached = self._probes.get(adapter.agent_id)
         if cached and time.monotonic() - cached[0] < max_age:
             return cached[1]
+        with self._lock:
+            refreshing = adapter.agent_id in self._refreshing
+            if not refreshing:
+                self._refreshing.add(adapter.agent_id)
+        if not refreshing:
+            threading.Thread(target=self._refresh, args=(adapter,), daemon=True,
+                             name=f'ghostroom-probe-{adapter.agent_id}').start()
+        return cached[1] if cached else {'availability': 'unknown', 'auth': 'unknown', 'quota': 'unknown'}
+
+    def _refresh(self, adapter):
         try:
             value = adapter.probe() or {}
         except Exception as exc:  # A probe failure is a state to show, never a crash.
             value = {'availability': 'unavailable', 'auth': 'unknown', 'quota': 'unknown',
                      'reason': classify(exc, adapter.agent_id)}
+        finally:
+            with self._lock:
+                self._refreshing.discard(adapter.agent_id)
         self._probes[adapter.agent_id] = (time.monotonic(), value)
-        return value
+
+    def probe_now(self):
+        """Refresh every adapter synchronously (startup and tests)."""
+        for adapter in self.adapters.values():
+            self._refresh(adapter)
 
     def note_failure(self, agent_id, value):
         """Remember a provider failure so availability reflects it before the next turn."""
@@ -221,6 +244,8 @@ class AgentRouter:
 
     def start(self):
         self._stop.clear()
+        for adapter in self.adapters.values():
+            self._probe(adapter)
         for agent_id in self.adapters:
             thread = self._threads.get(agent_id)
             if thread and thread.is_alive():

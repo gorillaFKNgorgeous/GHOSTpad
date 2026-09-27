@@ -29,7 +29,7 @@ A fresh session should be able to resume from this file alone.
       protocol-1 schemas. `MAPPING.md` maps every CURRENT-SHAPES shape and
       lists the gaps.
 
-- [x] **Step 3**: 47 valid and 41 invalid fixtures (invalid = patches on a
+- [x] **Step 3**: 48 valid and 41 invalid fixtures (invalid = patches on a
       valid base, each with an expected error). `ghostroom/tests/test_protocol.py`
       runs 95 tests: schemas are valid 2020-12, every schema/kind/artifact type/
       required failure code is exercised, and no URLs appear in fixtures. Wired

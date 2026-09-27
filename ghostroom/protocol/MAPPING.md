@@ -90,8 +90,10 @@ not copied into events. Evidence object:
 | `uncertain` (`error: app_restarted_during_command`) | `category: failure`, `failure.code: interrupted_after_possible_mutation`, `layer: blender`, `retry: never` |
 
 Gaps:
-- The journal entry holds **no `scene_id`, `boot_id`, originating agent or
-  `request_id`**. A `mutation` ledger entry requires `scene_id`, so the
+- (Closed for the relay ledger by the identity/ledger/lease PR: entries are
+  written from the relay's job row, which has all of these plus the
+  participant.) The device journal entry holds **no `scene_id`, `boot_id`,
+  originating agent or `request_id`**. A `mutation` ledger entry requires `scene_id`, so the
   adapter must join with the relay `jobs` row (which does have
   `scene_id`/`boot_id`) by `job_id`.
 - Two different digests exist: the device digest (hash of the delivered job
@@ -170,6 +172,13 @@ active-task state, and there is no router, so there is one agent per relay.
 External MCP clients (ChatGPT, Claude via Simple) are invisible to the relay
 as agents: every MCP call is anonymous at the relay.
 
+**Update (identity/ledger/lease PR, stacked on this one):** every MCP call is now
+attributed to a participant by the capability it presents: `/mcp/p/<capability>`
+maps to a participant, and the shared legacy route maps to
+`legacy-unattributed`. `clientInfo` is only an unverified label. The embedded
+worker is `codex-embedded`. See `docs/ghostroom/RELAY-IDENTITY-LEDGER-LEASES.md`.
+Availability, quota and auth publication remain gaps.
+
 ## 8. Edit lease
 
 **Gap: no lease exists.** The only serialization is one `issued` job per
@@ -178,6 +187,11 @@ agents interleaving multi-step edits. An external MCP client and the embedded
 Codex worker can both mutate the scene today. The GHOSTroom lease must be
 enforced where jobs are submitted (`Store.submit`) and checked against
 `execute_python`/`write_script`.
+
+**Update (identity/ledger/lease PR):** closed. Scene leases, explicit or
+implicit per job, are enforced in `Store.submit` for `execute_python`, with
+typed `lease_conflict`/`lease_invalid` failures. `write_script` uses a separate
+`script_workspace` lock. Lease events are ledgered.
 
 ## 9. Local UI message (`insight.py:34-40`)
 

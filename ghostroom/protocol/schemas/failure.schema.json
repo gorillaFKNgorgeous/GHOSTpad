@@ -4,7 +4,13 @@
   "title": "GHOSTroom typed failure",
   "description": "A specific failure. An agent failure is not a bridge failure: 'layer' says which part of the system failed, so the UI never collapses everything into 'AI error'.",
   "type": "object",
-  "required": ["code", "layer", "message", "mutation_possible", "retry"],
+  "required": [
+    "code",
+    "layer",
+    "message",
+    "mutation_possible",
+    "retry"
+  ],
   "additionalProperties": false,
   "properties": {
     "code": {
@@ -17,25 +23,47 @@
         "tool_timeout",
         "scene_changed",
         "interrupted_after_possible_mutation",
+        "lease_conflict",
+        "lease_invalid",
+        "script_workspace_busy",
         "tool_error",
         "unclassified"
       ],
-      "description": "tool_error: the Blender tool ran and reported an error (Python exception, invalid script name, render in progress). unclassified: only for mapping legacy free-text errors; new producers must choose a specific code."
+      "description": "tool_error: the Blender tool ran and reported an error (Python exception, invalid script name, render in progress). unclassified: only for mapping legacy free-text errors; new producers must choose a specific code. lease_conflict: another participant holds the scene edit lease. lease_invalid: the presented lease is unknown, not the caller's, expired, implicit or for another scene. script_workspace_busy: another persistent-script write is still pending."
     },
     "layer": {
-      "enum": ["agent_provider", "router", "relay", "bridge", "blender", "tool"]
+      "enum": [
+        "agent_provider",
+        "router",
+        "relay",
+        "bridge",
+        "blender",
+        "tool"
+      ]
     },
-    "message": { "$ref": "common.schema.json#/$defs/text" },
+    "message": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
     "mutation_possible": {
       "description": "True when Blender may have been changed before the failure. Consumers must inspect before any retry.",
       "type": "boolean"
     },
     "retry": {
       "description": "never: do not replay (may duplicate an edit). after_inspect: inspect the scene first. safe: idempotent retry. switch_agent: another available agent can continue.",
-      "enum": ["never", "after_inspect", "safe", "switch_agent", "after_user_action"]
+      "enum": [
+        "never",
+        "after_inspect",
+        "safe",
+        "switch_agent",
+        "after_user_action"
+      ]
     },
-    "agent_id": { "$ref": "common.schema.json#/$defs/id_or_name" },
-    "job": { "$ref": "common.schema.json#/$defs/job_evidence" },
+    "agent_id": {
+      "$ref": "common.schema.json#/$defs/id_or_name"
+    },
+    "job": {
+      "$ref": "common.schema.json#/$defs/job_evidence"
+    },
     "resets_at": {
       "description": "For quota_exhausted: when the provider expects capacity again, if known.",
       "$ref": "common.schema.json#/$defs/timestamp"
@@ -48,29 +76,146 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "code": { "const": "interrupted_after_possible_mutation" } } },
-      "then": { "properties": { "mutation_possible": { "const": true }, "retry": { "enum": ["never", "after_inspect"] } } }
+      "if": {
+        "properties": {
+          "code": {
+            "const": "interrupted_after_possible_mutation"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "mutation_possible": {
+            "const": true
+          },
+          "retry": {
+            "enum": [
+              "never",
+              "after_inspect"
+            ]
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "code": { "enum": ["quota_exhausted", "provider_unavailable"] } } },
-      "then": { "properties": { "layer": { "enum": ["agent_provider", "router"] } } }
+      "if": {
+        "properties": {
+          "code": {
+            "enum": [
+              "quota_exhausted",
+              "provider_unavailable"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "layer": {
+            "enum": [
+              "agent_provider",
+              "router"
+            ]
+          }
+        }
+      }
     },
     {
       "$comment": "auth_expired covers provider sign-in and the device pairing token (relay 401).",
-      "if": { "properties": { "code": { "const": "auth_expired" } } },
-      "then": { "properties": { "layer": { "enum": ["agent_provider", "router", "relay"] } } }
+      "if": {
+        "properties": {
+          "code": {
+            "const": "auth_expired"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "layer": {
+            "enum": [
+              "agent_provider",
+              "router",
+              "relay"
+            ]
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "code": { "const": "relay_unavailable" } } },
-      "then": { "properties": { "layer": { "const": "relay" } } }
+      "if": {
+        "properties": {
+          "code": {
+            "const": "relay_unavailable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "layer": {
+            "const": "relay"
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "code": { "const": "blender_suspended" } } },
-      "then": { "properties": { "layer": { "enum": ["bridge", "blender"] } } }
+      "if": {
+        "properties": {
+          "code": {
+            "const": "blender_suspended"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "layer": {
+            "enum": [
+              "bridge",
+              "blender"
+            ]
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "mutation_possible": { "const": true } } },
-      "then": { "properties": { "retry": { "not": { "const": "safe" } } } }
+      "if": {
+        "properties": {
+          "mutation_possible": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "retry": {
+            "not": {
+              "const": "safe"
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Lease and workspace refusals are decided by the relay before anything runs.",
+      "if": {
+        "properties": {
+          "code": {
+            "enum": [
+              "lease_conflict",
+              "lease_invalid",
+              "script_workspace_busy"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "layer": {
+            "const": "relay"
+          },
+          "mutation_possible": {
+            "const": false
+          }
+        }
+      }
     }
   ]
 }

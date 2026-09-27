@@ -1,0 +1,17 @@
+{
+  "lease_id": "implicit-fixture-job-0001",
+  "holder": {
+    "kind": "agent",
+    "id": "claude",
+    "provider": "claude",
+    "display_name": "Claude"
+  },
+  "acquired_at": "2026-09-27T04:00:00.000Z",
+  "expires_at": "2026-09-27T04:01:30.000Z",
+  "scope": {
+    "kind": "script_workspace"
+  },
+  "state": "active",
+  "implicit": true,
+  "job_id": "fixture-job-0001"
+}

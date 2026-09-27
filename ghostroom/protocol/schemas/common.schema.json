@@ -37,17 +37,28 @@
     "origin": {
       "description": "Who produced an event or entry. Identifies the origin; it never owns the record.",
       "type": "object",
-      "required": ["kind", "id"],
+      "required": [
+        "kind",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "enum": ["user", "agent", "ghostblender", "relay", "system"]
+          "enum": [
+            "user",
+            "agent",
+            "ghostblender",
+            "relay",
+            "system"
+          ]
         },
         "id": {
           "description": "Stable id within its kind, e.g. 'owner', 'codex', 'claude', 'bridge'.",
           "$ref": "#/$defs/id_or_name"
         },
-        "display_name": { "$ref": "#/$defs/short_text" },
+        "display_name": {
+          "$ref": "#/$defs/short_text"
+        },
         "provider": {
           "description": "For agents: provider adapter name (codex, claude, gemini, openai, ...). Free string so no vendor is structurally essential.",
           "type": "string",
@@ -67,30 +78,70 @@
     "stream_position": {
       "description": "Delivery cursor contract. stream_id changes whenever the sequence restarts (for example a relay database reset), so a consumer holding a cursor for another stream_id must reset to 0 instead of skipping events.",
       "type": "object",
-      "required": ["stream_id", "seq"],
+      "required": [
+        "stream_id",
+        "seq"
+      ],
       "additionalProperties": false,
       "properties": {
-        "stream_id": { "$ref": "#/$defs/id" },
-        "seq": { "type": "integer", "minimum": 1 }
+        "stream_id": {
+          "$ref": "#/$defs/id"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "collab_role": {
-      "enum": ["primary", "reviewer", "specialist", "critic", "verifier"]
+      "enum": [
+        "primary",
+        "reviewer",
+        "specialist",
+        "critic",
+        "verifier"
+      ]
     },
     "job_evidence": {
       "description": "Reference to a GhostBlender job. Evidence points at the job and its digests; it never copies the job's arguments or result payload.",
       "type": "object",
-      "required": ["type", "job_id", "operation", "state"],
+      "required": [
+        "type",
+        "job_id",
+        "operation",
+        "state"
+      ],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "job" },
-        "job_id": { "$ref": "#/$defs/id" },
+        "type": {
+          "const": "job"
+        },
+        "job_id": {
+          "$ref": "#/$defs/id"
+        },
         "operation": {
-          "enum": ["inspect_scene", "execute_python", "capture", "diagnostics", "list_scripts", "read_script", "write_script"]
+          "enum": [
+            "inspect_scene",
+            "execute_python",
+            "capture",
+            "diagnostics",
+            "list_scripts",
+            "read_script",
+            "write_script"
+          ]
         },
         "state": {
           "description": "Union of relay job states and device journal states.",
-          "enum": ["queued", "issued", "running", "completed", "failed", "expired", "uncertain", "cancelled"]
+          "enum": [
+            "queued",
+            "issued",
+            "running",
+            "completed",
+            "failed",
+            "expired",
+            "uncertain",
+            "cancelled"
+          ]
         },
         "device_digest": {
           "description": "Device journal digest: sha256 of the delivered job JSON (agent/runtime/core.py:110).",
@@ -104,35 +155,71 @@
           "description": "Optional hash of the stored result JSON, so evidence can be checked without being copied.",
           "$ref": "#/$defs/sha256"
         },
-        "scene_id": { "$ref": "#/$defs/blender_id" },
-        "boot_id": { "$ref": "#/$defs/blender_id" },
-        "started_at": { "$ref": "#/$defs/timestamp" },
-        "ended_at": { "$ref": "#/$defs/timestamp" }
+        "scene_id": {
+          "$ref": "#/$defs/blender_id"
+        },
+        "boot_id": {
+          "$ref": "#/$defs/blender_id"
+        },
+        "started_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "ended_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "request_id": {
+          "description": "Caller's idempotency key for the job.",
+          "$ref": "#/$defs/id"
+        }
       },
       "anyOf": [
-        { "required": ["device_digest"] },
-        { "required": ["relay_digest"] }
+        {
+          "required": [
+            "device_digest"
+          ]
+        },
+        {
+          "required": [
+            "relay_digest"
+          ]
+        }
       ]
     },
     "evidence_ref": {
       "oneOf": [
-        { "$ref": "#/$defs/job_evidence" },
+        {
+          "$ref": "#/$defs/job_evidence"
+        },
         {
           "type": "object",
-          "required": ["type", "artifact_id"],
+          "required": [
+            "type",
+            "artifact_id"
+          ],
           "additionalProperties": false,
           "properties": {
-            "type": { "const": "artifact" },
-            "artifact_id": { "$ref": "#/$defs/id" }
+            "type": {
+              "const": "artifact"
+            },
+            "artifact_id": {
+              "$ref": "#/$defs/id"
+            }
           }
         },
         {
           "type": "object",
-          "required": ["type", "event_id"],
+          "required": [
+            "type",
+            "event_id"
+          ],
           "additionalProperties": false,
           "properties": {
-            "type": { "const": "event" },
-            "event_id": { "$ref": "#/$defs/id" }
+            "type": {
+              "const": "event"
+            },
+            "event_id": {
+              "$ref": "#/$defs/id"
+            }
           }
         }
       ]
@@ -140,14 +227,37 @@
     "media_ref": {
       "description": "Binary media by reference. Payload bytes never travel inside events or ledger entries.",
       "type": "object",
-      "required": ["media_type", "sha256", "width", "height"],
+      "required": [
+        "media_type",
+        "sha256",
+        "width",
+        "height"
+      ],
       "additionalProperties": false,
       "properties": {
-        "media_type": { "enum": ["image/png", "image/jpeg", "image/heic", "image/webp"] },
-        "sha256": { "$ref": "#/$defs/sha256" },
-        "bytes": { "type": "integer", "minimum": 1 },
-        "width": { "type": "integer", "minimum": 1 },
-        "height": { "type": "integer", "minimum": 1 },
+        "media_type": {
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/heic",
+            "image/webp"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
         "uri": {
           "description": "Where a consumer may fetch the bytes (relative relay path or app-local store key). Must not be a capability URL.",
           "type": "string",

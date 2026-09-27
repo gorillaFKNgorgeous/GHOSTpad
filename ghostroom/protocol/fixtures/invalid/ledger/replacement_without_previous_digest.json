@@ -1,0 +1,8 @@
+{
+  "why": "replacing a script must record the previous digest",
+  "base": "ledger/persistent_code_write.json",
+  "expect": "persistent_code/previous_sha256: None is not of type 'string'",
+  "set": {
+    "/persistent_code/previous_sha256": null
+  }
+}

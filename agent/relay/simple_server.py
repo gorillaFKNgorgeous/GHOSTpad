@@ -59,10 +59,16 @@ if __name__ == '__main__':
         (os.environ.get('BIND_HOST', '127.0.0.1'), port),
         app,
     )
+    # The embedded worker is its own participant. Its capability is regenerated
+    # at every start and only its digest is stored, so it never needs rotating.
+    # The shared legacy capability behind Caddy keeps mapping to
+    # legacy-unattributed.
+    worker_capability = app.store.ensure_participant_capability(
+        'codex-embedded', 'agent', 'Codex (embedded chat)', provider='codex')
     app.chat = ChatWorker(
         app.store,
         app.device_id,
-        f'http://127.0.0.1:{port}/mcp',
+        f'http://127.0.0.1:{port}/mcp/p/{worker_capability}',
     )
     app.chat.start()
     try:

@@ -4,68 +4,239 @@
   "title": "GHOSTroom artifact",
   "description": "A durable, renderable object richer than chat text. Events and ledger entries reference artifacts by artifact_id.",
   "type": "object",
-  "required": ["artifact_id", "type", "created_at", "origin"],
+  "required": [
+    "artifact_id",
+    "type",
+    "created_at",
+    "origin"
+  ],
   "properties": {
-    "artifact_id": { "$ref": "common.schema.json#/$defs/id" },
-    "type": {
-      "enum": ["screenshot", "render", "object_ref", "checkpoint", "task", "review_card", "lesson_step"]
+    "artifact_id": {
+      "$ref": "common.schema.json#/$defs/id"
     },
-    "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
-    "origin": { "$ref": "common.schema.json#/$defs/origin" },
-    "title": { "$ref": "common.schema.json#/$defs/short_text" }
+    "type": {
+      "enum": [
+        "screenshot",
+        "render",
+        "object_ref",
+        "checkpoint",
+        "task",
+        "review_card",
+        "lesson_step"
+      ]
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "origin": {
+      "$ref": "common.schema.json#/$defs/origin"
+    },
+    "title": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    }
   },
-  "oneOf": [
-    { "$ref": "#/$defs/screenshot" },
-    { "$ref": "#/$defs/render" },
-    { "$ref": "#/$defs/object_ref" },
-    { "$ref": "#/$defs/checkpoint" },
-    { "$ref": "#/$defs/task" },
-    { "$ref": "#/$defs/review_card" },
-    { "$ref": "#/$defs/lesson_step" }
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "screenshot"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/screenshot"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "render"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/render"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "object_ref"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/object_ref"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "checkpoint"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/checkpoint"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "task"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/task"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "review_card"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/review_card"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "lesson_step"
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/lesson_step"
+      }
+    }
   ],
   "$defs": {
     "screenshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "media", "capture_source", "evidence"],
+      "required": [
+        "type",
+        "media",
+        "capture_source",
+        "evidence"
+      ],
       "properties": {
-        "artifact_id": true, "created_at": true, "origin": true, "title": true,
-        "type": { "const": "screenshot" },
-        "media": { "$ref": "common.schema.json#/$defs/media_ref" },
-        "capture_source": { "enum": ["app_window", "viewport"] },
-        "scene_id": { "$ref": "common.schema.json#/$defs/blender_id" },
-        "evidence": { "$ref": "common.schema.json#/$defs/job_evidence" }
+        "artifact_id": true,
+        "created_at": true,
+        "origin": true,
+        "title": true,
+        "type": {
+          "const": "screenshot"
+        },
+        "media": {
+          "$ref": "common.schema.json#/$defs/media_ref"
+        },
+        "capture_source": {
+          "enum": [
+            "app_window",
+            "viewport"
+          ]
+        },
+        "scene_id": {
+          "$ref": "common.schema.json#/$defs/blender_id"
+        },
+        "evidence": {
+          "$ref": "common.schema.json#/$defs/job_evidence"
+        }
       }
     },
     "render": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "media", "evidence"],
+      "required": [
+        "type",
+        "media",
+        "evidence"
+      ],
       "properties": {
-        "artifact_id": true, "created_at": true, "origin": true, "title": true,
-        "type": { "const": "render" },
-        "media": { "$ref": "common.schema.json#/$defs/media_ref" },
-        "engine": { "type": "string", "maxLength": 64 },
-        "frame": { "type": "integer" },
-        "scene_id": { "$ref": "common.schema.json#/$defs/blender_id" },
-        "evidence": { "$ref": "common.schema.json#/$defs/job_evidence" }
+        "artifact_id": true,
+        "created_at": true,
+        "origin": true,
+        "title": true,
+        "type": {
+          "const": "render"
+        },
+        "media": {
+          "$ref": "common.schema.json#/$defs/media_ref"
+        },
+        "engine": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "frame": {
+          "type": "integer"
+        },
+        "scene_id": {
+          "$ref": "common.schema.json#/$defs/blender_id"
+        },
+        "evidence": {
+          "$ref": "common.schema.json#/$defs/job_evidence"
+        }
       }
     },
     "object_ref": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "scene_id", "datablock", "name"],
+      "required": [
+        "type",
+        "scene_id",
+        "datablock",
+        "name"
+      ],
       "properties": {
-        "artifact_id": true, "created_at": true, "origin": true, "title": true,
-        "type": { "const": "object_ref" },
+        "artifact_id": true,
+        "created_at": true,
+        "origin": true,
+        "title": true,
+        "type": {
+          "const": "object_ref"
+        },
         "scene_id": {
           "description": "Scene the name was valid in. A name is only meaningful with its scene_id; renames and file loads invalidate it.",
           "$ref": "common.schema.json#/$defs/blender_id"
         },
-        "boot_id": { "$ref": "common.schema.json#/$defs/blender_id" },
-        "datablock": { "enum": ["object", "mesh", "material", "collection", "armature", "action", "image", "node_group", "scene", "other"] },
-        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
-        "object_type": { "type": "string", "maxLength": 32 },
+        "boot_id": {
+          "$ref": "common.schema.json#/$defs/blender_id"
+        },
+        "datablock": {
+          "enum": [
+            "object",
+            "mesh",
+            "material",
+            "collection",
+            "armature",
+            "action",
+            "image",
+            "node_group",
+            "scene",
+            "other"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "object_type": {
+          "type": "string",
+          "maxLength": 32
+        },
         "subpath": {
           "description": "Optional RNA-style path inside the datablock, e.g. 'modifiers[\"Cloth\"]' or 'pose.bones[\"Head\"]'.",
           "type": "string",
@@ -76,45 +247,106 @@
     "checkpoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "label", "method", "scene_id"],
+      "required": [
+        "type",
+        "label",
+        "method",
+        "scene_id"
+      ],
       "properties": {
-        "artifact_id": true, "created_at": true, "origin": true, "title": true,
-        "type": { "const": "checkpoint" },
-        "label": { "$ref": "common.schema.json#/$defs/short_text" },
+        "artifact_id": true,
+        "created_at": true,
+        "origin": true,
+        "title": true,
+        "type": {
+          "const": "checkpoint"
+        },
+        "label": {
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
         "method": {
           "description": "How the checkpoint was made. Scene partial library writes are deliberately absent: they crash on this build.",
-          "enum": ["save_mainfile", "save_as_copy", "file_copy", "undo_step_marker"]
+          "enum": [
+            "save_mainfile",
+            "save_as_copy",
+            "file_copy",
+            "undo_step_marker"
+          ]
         },
-        "scene_id": { "$ref": "common.schema.json#/$defs/blender_id" },
+        "scene_id": {
+          "$ref": "common.schema.json#/$defs/blender_id"
+        },
         "file": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["path", "sha256"],
+          "required": [
+            "path",
+            "sha256"
+          ],
           "properties": {
-            "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
-            "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
-            "bytes": { "type": "integer", "minimum": 1 }
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "sha256": {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         },
-        "evidence": { "$ref": "common.schema.json#/$defs/job_evidence" },
-        "known_good": { "type": "boolean" }
+        "evidence": {
+          "$ref": "common.schema.json#/$defs/job_evidence"
+        },
+        "known_good": {
+          "type": "boolean"
+        }
       }
     },
     "task": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "title", "state"],
+      "required": [
+        "type",
+        "title",
+        "state"
+      ],
       "properties": {
-        "artifact_id": true, "created_at": true, "origin": true,
-        "type": { "const": "task" },
-        "title": { "$ref": "common.schema.json#/$defs/short_text" },
-        "detail": { "$ref": "common.schema.json#/$defs/text" },
-        "state": { "enum": ["open", "in_progress", "blocked", "done", "abandoned"] },
-        "assignee": { "$ref": "common.schema.json#/$defs/id_or_name" },
-        "role": { "$ref": "common.schema.json#/$defs/collab_role" },
+        "artifact_id": true,
+        "created_at": true,
+        "origin": true,
+        "type": {
+          "const": "task"
+        },
+        "title": {
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
+        "detail": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
+        "state": {
+          "enum": [
+            "open",
+            "in_progress",
+            "blocked",
+            "done",
+            "abandoned"
+          ]
+        },
+        "assignee": {
+          "$ref": "common.schema.json#/$defs/id_or_name"
+        },
+        "role": {
+          "$ref": "common.schema.json#/$defs/collab_role"
+        },
         "depends_on": {
           "type": "array",
-          "items": { "$ref": "common.schema.json#/$defs/id" },
+          "items": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
           "uniqueItems": true
         },
         "reason": {
@@ -124,35 +356,86 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "state": { "enum": ["blocked", "abandoned"] } } },
-          "then": { "required": ["reason"] }
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "blocked",
+                  "abandoned"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ]
+          }
         }
       ]
     },
     "review_card": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "subject", "reviewer", "verdict", "findings"],
+      "required": [
+        "type",
+        "subject",
+        "reviewer",
+        "verdict",
+        "findings"
+      ],
       "properties": {
-        "artifact_id": true, "created_at": true, "origin": true, "title": true,
-        "type": { "const": "review_card" },
-        "subject": { "$ref": "common.schema.json#/$defs/evidence_ref" },
-        "reviewer": { "$ref": "common.schema.json#/$defs/origin" },
-        "role": { "$ref": "common.schema.json#/$defs/collab_role" },
-        "verdict": { "enum": ["pending", "approved", "concerns", "rejected"] },
+        "artifact_id": true,
+        "created_at": true,
+        "origin": true,
+        "title": true,
+        "type": {
+          "const": "review_card"
+        },
+        "subject": {
+          "$ref": "common.schema.json#/$defs/evidence_ref"
+        },
+        "reviewer": {
+          "$ref": "common.schema.json#/$defs/origin"
+        },
+        "role": {
+          "$ref": "common.schema.json#/$defs/collab_role"
+        },
+        "verdict": {
+          "enum": [
+            "pending",
+            "approved",
+            "concerns",
+            "rejected"
+          ]
+        },
         "findings": {
           "type": "array",
           "maxItems": 64,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["severity", "text"],
+            "required": [
+              "severity",
+              "text"
+            ],
             "properties": {
-              "severity": { "enum": ["info", "minor", "major", "blocking"] },
-              "text": { "$ref": "common.schema.json#/$defs/text" },
+              "severity": {
+                "enum": [
+                  "info",
+                  "minor",
+                  "major",
+                  "blocking"
+                ]
+              },
+              "text": {
+                "$ref": "common.schema.json#/$defs/text"
+              },
               "evidence": {
                 "type": "array",
-                "items": { "$ref": "common.schema.json#/$defs/evidence_ref" }
+                "items": {
+                  "$ref": "common.schema.json#/$defs/evidence_ref"
+                }
               }
             }
           }
@@ -162,44 +445,109 @@
     "lesson_step": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "lesson_id", "index", "mode", "instruction", "state"],
+      "required": [
+        "type",
+        "lesson_id",
+        "index",
+        "mode",
+        "instruction",
+        "state"
+      ],
       "properties": {
-        "artifact_id": true, "created_at": true, "origin": true, "title": true,
-        "type": { "const": "lesson_step" },
-        "lesson_id": { "$ref": "common.schema.json#/$defs/id" },
-        "index": { "type": "integer", "minimum": 0 },
-        "mode": { "enum": ["do_it_for_me", "do_it_with_me", "teach_me", "explain_this", "review_my_work"] },
-        "instruction": { "$ref": "common.schema.json#/$defs/text" },
+        "artifact_id": true,
+        "created_at": true,
+        "origin": true,
+        "title": true,
+        "type": {
+          "const": "lesson_step"
+        },
+        "lesson_id": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mode": {
+          "enum": [
+            "do_it_for_me",
+            "do_it_with_me",
+            "teach_me",
+            "explain_this",
+            "review_my_work"
+          ]
+        },
+        "instruction": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
         "performer": {
           "description": "Who performs this step: the learner, the agent, or either.",
-          "enum": ["learner", "agent", "either"]
+          "enum": [
+            "learner",
+            "agent",
+            "either"
+          ]
         },
         "completion": {
           "description": "What GhostBlender observes to decide the step is done.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["signal"],
+          "required": [
+            "signal"
+          ],
           "properties": {
             "signal": {
-              "enum": ["selection", "mode_change", "setting_change", "modifier_change", "transform", "edit", "animation_change", "render", "manual_confirm"]
+              "enum": [
+                "selection",
+                "mode_change",
+                "setting_change",
+                "modifier_change",
+                "transform",
+                "edit",
+                "animation_change",
+                "render",
+                "manual_confirm"
+              ]
             },
-            "target": { "$ref": "#/$defs/object_ref_inline" },
+            "target": {
+              "$ref": "#/$defs/object_ref_inline"
+            },
             "criteria": {
               "description": "Signal-specific, e.g. {\"mode\": \"EDIT_MESH\"} or {\"modifier_type\": \"SUBSURF\"}.",
               "type": "object"
             }
           }
         },
-        "state": { "enum": ["pending", "demonstrating", "waiting_for_learner", "checking", "completed", "needs_help", "skipped"] }
+        "state": {
+          "enum": [
+            "pending",
+            "demonstrating",
+            "waiting_for_learner",
+            "checking",
+            "completed",
+            "needs_help",
+            "skipped"
+          ]
+        }
       }
     },
     "object_ref_inline": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["datablock", "name"],
+      "required": [
+        "datablock",
+        "name"
+      ],
       "properties": {
-        "datablock": { "type": "string", "maxLength": 32 },
-        "name": { "type": "string", "minLength": 1, "maxLength": 256 }
+        "datablock": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
       }
     }
   }

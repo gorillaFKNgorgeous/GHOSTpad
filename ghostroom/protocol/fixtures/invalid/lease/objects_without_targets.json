@@ -1,0 +1,8 @@
+{
+  "why": "objects scope needs targets",
+  "base": "lease/revoked_objects.json",
+  "expect": "scope: 'targets' is a required",
+  "remove": [
+    "/scope/targets"
+  ]
+}

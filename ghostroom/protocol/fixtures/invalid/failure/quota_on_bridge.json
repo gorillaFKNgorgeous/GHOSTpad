@@ -1,0 +1,9 @@
+{
+  "why": "provider/quota failures belong to the agent layer, not the bridge",
+  "base": "failure/provider_unavailable.json",
+  "expect": "layer: 'bridge' is not one of",
+  "set": {
+    "/code": "quota_exhausted",
+    "/layer": "bridge"
+  }
+}

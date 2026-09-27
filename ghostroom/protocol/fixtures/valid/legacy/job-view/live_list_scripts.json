@@ -1,0 +1,25 @@
+{
+  "job_id": "c2f649203ce14e4f96b1ba22413066cc",
+  "state": "completed",
+  "operation": "list_scripts",
+  "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+  "created_at": 1790475840.1945722,
+  "result": {
+    "ok": true,
+    "value": [
+      {
+        "name": "gb_cloth_bake.py",
+        "bytes": 11912
+      },
+      {
+        "name": "hero_retarget.py",
+        "bytes": 22103
+      },
+      {
+        "name": "ghostblender_insight.py",
+        "bytes": 16336
+      }
+    ],
+    "scene_id": "e6072cdd2e354163a5b3922058174f7f"
+  }
+}

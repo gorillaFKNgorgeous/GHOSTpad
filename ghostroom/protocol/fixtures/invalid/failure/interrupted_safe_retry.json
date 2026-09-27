@@ -1,0 +1,9 @@
+{
+  "why": "possible mutation forbids a safe retry",
+  "base": "failure/tool_timeout_python.json",
+  "expect": "retry: 'safe'",
+  "set": {
+    "/code": "interrupted_after_possible_mutation",
+    "/retry": "safe"
+  }
+}

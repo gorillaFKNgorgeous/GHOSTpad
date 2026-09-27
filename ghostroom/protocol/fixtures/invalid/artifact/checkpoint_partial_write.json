@@ -1,0 +1,8 @@
+{
+  "why": "Scene partial library writes are not an allowed checkpoint method",
+  "base": "artifact/checkpoint.json",
+  "expect": "method: 'libraries_write_partial' is not one of",
+  "set": {
+    "/method": "libraries_write_partial"
+  }
+}

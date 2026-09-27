@@ -1,0 +1,8 @@
+{
+  "why": "running is a device journal state, not a relay job state",
+  "base": "legacy/job-view/queued.json",
+  "expect": "'running' is not one of",
+  "set": {
+    "/state": "running"
+  }
+}

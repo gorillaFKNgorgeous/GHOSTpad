@@ -1,0 +1,17 @@
+{
+  "artifact_id": "obj-GB_Rig-01",
+  "type": "object_ref",
+  "created_at": "2026-09-27T02:24:00.194Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+  "boot_id": "2f034d002d1f42c989ffd2ad95171a60",
+  "datablock": "object",
+  "name": "GB_Mask • cloth shell",
+  "object_type": "MESH",
+  "subpath": "modifiers[\"Cloth • skull-draped mask\"]"
+}

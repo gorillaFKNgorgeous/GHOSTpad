@@ -1,0 +1,8 @@
+{
+  "why": "failed status requires a typed failure",
+  "base": "event/discuss_final_from_legacy.json",
+  "expect": "'failure' is a required",
+  "set": {
+    "/status": "failed"
+  }
+}

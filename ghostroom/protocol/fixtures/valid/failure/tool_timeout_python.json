@@ -1,0 +1,17 @@
+{
+  "code": "tool_timeout",
+  "layer": "tool",
+  "message": "Python time limit reached; partial edits may exist",
+  "mutation_possible": true,
+  "retry": "after_inspect",
+  "job": {
+    "type": "job",
+    "job_id": "fixture-exec-python-0001",
+    "operation": "execute_python",
+    "state": "completed",
+    "device_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "relay_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "started_at": "2026-09-25T13:34:09.059Z",
+    "ended_at": "2026-09-25T13:34:09.066Z"
+  }
+}

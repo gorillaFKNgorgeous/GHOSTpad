@@ -29,10 +29,35 @@ A fresh session should be able to resume from this file alone.
       protocol-1 schemas. `MAPPING.md` maps every CURRENT-SHAPES shape and
       lists the gaps.
 
-## Next
+- [x] **Step 3**: 46 valid and 40 invalid fixtures (invalid = patches on a
+      valid base, each with an expected error). `ghostroom/tests/test_protocol.py`
+      runs 92 tests: schemas are valid 2020-12, every schema/kind/artifact type/
+      required failure code is exercised, and no URLs appear in fixtures. Wired
+      into `.github/workflows/agent-checks.yml` (protocol job). A
+      `pull_request` trigger was added so PRs run it too.
 
-- [ ] **Step 3**: fixtures, pytest, wire into `agent-checks.yml`.
-- Stop after Step 3 and report. No UI or relay work before approval.
+## Next (awaiting approval; nothing started)
+
+- Stopped after Step 3 as instructed. No UI or relay work yet.
+- Candidate next steps, in the order I'd suggest:
+  1. Fix the chat cursor skip (`stream_id` in the relay chat reply, device
+     resets when it changes). Small; touches `agent/relay/store.py` and
+     `agent/runtime/insight.py`, so it needs approval.
+  2. Relay adapter that emits `ghostroom/0` events and ledger entries from
+     the existing chat and job tables (read-only projection, no behavior
+     change).
+  3. Typed failure codes on relay chat errors (MAPPING §2 gap).
+  4. Edit lease enforcement in `Store.submit` (MAPPING §8 gap).
+
+## How to resume
+
+```sh
+python -m pip install 'jsonschema==4.25.1' 'pytest==8.4.2'
+python -m pytest ghostroom/tests -q          # protocol
+python -m unittest discover -s agent/tests   # existing bridge tests
+```
+Read `docs/ghostroom/CURRENT-SHAPES.md` (today), then
+`ghostroom/protocol/README.md` and `MAPPING.md` (draft and gaps).
 
 ## Open questions
 

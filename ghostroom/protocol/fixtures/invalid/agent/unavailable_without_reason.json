@@ -1,0 +1,8 @@
+{
+  "why": "unavailable agents must carry a typed reason",
+  "base": "agent/claude_quota_exhausted.json",
+  "expect": "availability: 'reason' is a required",
+  "remove": [
+    "/availability/reason"
+  ]
+}

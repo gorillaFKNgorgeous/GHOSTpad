@@ -1,0 +1,8 @@
+{
+  "why": "failure entries need a typed failure",
+  "base": "ledger/failure_uncertain.json",
+  "expect": "'failure' is a required",
+  "remove": [
+    "/failure"
+  ]
+}

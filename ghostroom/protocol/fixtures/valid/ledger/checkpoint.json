@@ -1,0 +1,31 @@
+{
+  "entry_id": "led-0006",
+  "seq": {
+    "stream_id": "ledger-main-0001",
+    "seq": 6
+  },
+  "timestamp": "2026-09-27T02:33:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "category": "checkpoint",
+  "summary": "Saved a known-good copy before rebake.",
+  "artifacts": [
+    "ckpt-0001"
+  ],
+  "evidence": [
+    {
+      "type": "job",
+      "job_id": "fixture-exec-python-0001",
+      "operation": "execute_python",
+      "state": "completed",
+      "device_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "relay_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "started_at": "2026-09-25T13:34:09.059Z",
+      "ended_at": "2026-09-25T13:34:09.066Z"
+    }
+  ]
+}

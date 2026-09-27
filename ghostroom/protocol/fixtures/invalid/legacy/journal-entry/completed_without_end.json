@@ -1,0 +1,8 @@
+{
+  "why": "completed entries always have ended_at (core.py:133-134)",
+  "base": "legacy/journal-entry/live_completed.json",
+  "expect": "'ended_at' is a required",
+  "remove": [
+    "/ended_at"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "why": "blocked/abandoned tasks must say why",
+  "base": "artifact/task_blocked.json",
+  "expect": "'reason' is a required",
+  "remove": [
+    "/reason"
+  ]
+}

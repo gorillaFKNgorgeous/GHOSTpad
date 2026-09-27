@@ -1,0 +1,8 @@
+{
+  "why": "relay requires exactly {id, text} (store.py:216)",
+  "base": "legacy/chat-request/one_pending.json",
+  "expect": "('role' was unexpected)",
+  "set": {
+    "/messages/0/role": "user"
+  }
+}

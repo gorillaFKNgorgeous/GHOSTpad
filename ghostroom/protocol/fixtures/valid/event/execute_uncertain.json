@@ -1,0 +1,26 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-exec-0003",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "relay",
+    "id": "relay"
+  },
+  "lane": "relay",
+  "kind": "execute",
+  "parent": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "status": "uncertain",
+  "body": {
+    "summary": "Codex turn interrupted by relay restart",
+    "mutation": "possible",
+    "lease_id": "lease-0001-scene"
+  },
+  "failure": {
+    "code": "interrupted_after_possible_mutation",
+    "layer": "relay",
+    "message": "Previous AI turn was interrupted and was not replayed automatically.",
+    "mutation_possible": true,
+    "retry": "never",
+    "legacy_error": "Previous AI turn was interrupted and was not replayed automatically."
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "lease_id": "lease-0002-objs",
+  "holder": {
+    "kind": "agent",
+    "id": "claude",
+    "provider": "claude",
+    "display_name": "Claude"
+  },
+  "acquired_at": "2026-09-27T02:24:00.194Z",
+  "expires_at": "2026-09-27T02:29:00.194Z",
+  "scope": {
+    "kind": "objects",
+    "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+    "targets": [
+      "GB_Rig",
+      "GB_Mask • cloth shell"
+    ]
+  },
+  "state": "revoked",
+  "revoked_by": {
+    "kind": "user",
+    "id": "owner",
+    "display_name": "Owner"
+  },
+  "reason": "User took over."
+}

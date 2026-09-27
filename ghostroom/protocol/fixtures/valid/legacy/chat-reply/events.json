@@ -1,0 +1,26 @@
+{
+  "cursor": 43,
+  "ack_ids": [
+    "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d"
+  ],
+  "events": [
+    {
+      "seq": 41,
+      "message_id": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+      "type": "status",
+      "text": "AI working"
+    },
+    {
+      "seq": 42,
+      "message_id": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+      "type": "final",
+      "text": "The active object is GB_Rig."
+    },
+    {
+      "seq": 43,
+      "message_id": null,
+      "type": "error",
+      "text": "Previous AI turn was interrupted and was not replayed automatically."
+    }
+  ]
+}

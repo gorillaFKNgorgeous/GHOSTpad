@@ -1,0 +1,8 @@
+{
+  "why": "parent is required (null for roots, never absent)",
+  "base": "event/discuss_user_root.json",
+  "expect": "'parent' is a required",
+  "remove": [
+    "/parent"
+  ]
+}

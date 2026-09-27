@@ -1,0 +1,27 @@
+{
+  "artifact_id": "lesson-0001-step-2",
+  "type": "lesson_step",
+  "created_at": "2026-09-27T02:24:00.194Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "lesson_id": "lesson-0001",
+  "index": 2,
+  "mode": "teach_me",
+  "instruction": "Select GB_Mask and enter Edit Mode.",
+  "performer": "learner",
+  "completion": {
+    "signal": "mode_change",
+    "target": {
+      "datablock": "object",
+      "name": "GB_Mask • cloth shell"
+    },
+    "criteria": {
+      "mode": "EDIT_MESH"
+    }
+  },
+  "state": "waiting_for_learner"
+}

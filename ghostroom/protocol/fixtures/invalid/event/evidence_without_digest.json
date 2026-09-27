@@ -1,0 +1,8 @@
+{
+  "why": "job evidence needs a device or relay digest",
+  "base": "event/inspect_scene.json",
+  "expect": "evidence/0: 'device_digest' is a required",
+  "remove": [
+    "/evidence/0/device_digest"
+  ]
+}

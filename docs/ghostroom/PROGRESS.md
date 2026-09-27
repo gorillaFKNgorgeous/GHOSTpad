@@ -48,11 +48,13 @@ PR layout. GHOSTpad stays one public repository; there is no separate service re
 
 - [x] **Cursor fix split into PR #3** and removed from this branch. The
       docs here describe it as "PR #3".
-- [ ] **Secret-scan CI**: capability URLs, bearer/access tokens, provider
-      credentials, device/agent/OAuth secrets, public IPs, IP-embedding relay
-      hostnames. Synthetic examples use reserved values.
-- [ ] **Script workspace investigation** (`docs/ghostroom/SCRIPT-WORKSPACE.md`),
-      written before any `write_script` policy.
+- [x] **Secret-scan CI** (`.github/workflows/secret-scan.yml`,
+      `.github/scripts/scan_secrets.py`, policy in `REPOSITORY-POLICY.md`).
+      Runs on every push/PR. One allowlisted public value (the Google IAP range).
+- [x] **Script workspace investigation** (`docs/ghostroom/SCRIPT-WORKSPACE.md`).
+      The bridge never auto-loads the workspace. Whether the live device has a
+      loader installed by earlier privileged Python is UNKNOWN; the read-only
+      probe needs approval.
 - [ ] **B1.5 participant identity**: a capability maps server-side to a
       participant_id. `clientInfo` is an unverified label only. The existing
       shared Simple capability maps to `legacy-unattributed`.

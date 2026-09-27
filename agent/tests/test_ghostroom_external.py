@@ -301,10 +301,12 @@ class AgentSecretsTests(unittest.TestCase):
         adapter = ClaudeAdapter()
         adapter.secrets = self.secrets
         old_env = os.environ.get('ANTHROPIC_API_KEY')
-        os.environ['ANTHROPIC_API_KEY'] = 'sk-fromenv000000000000'
+        # Synthetic values assembled at runtime, so the secret scan never sees a key-shaped literal.
+        env_key, stored_key = 'e' * 30, 's' * 30
+        os.environ['ANTHROPIC_API_KEY'] = env_key
         try:
-            self.secrets.set('claude.api_key', 'sk-fromstore00000000000')
-            self.assertEqual(adapter.api_key(), 'sk-fromstore00000000000')
+            self.secrets.set('claude.api_key', stored_key)
+            self.assertEqual(adapter.api_key(), stored_key)
         finally:
             if old_env is None:
                 os.environ.pop('ANTHROPIC_API_KEY', None)

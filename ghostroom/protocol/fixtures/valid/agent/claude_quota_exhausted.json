@@ -1,0 +1,36 @@
+{
+  "agent_id": "claude",
+  "display_name": "Claude",
+  "provider": "claude",
+  "availability": {
+    "state": "unavailable",
+    "reason": {
+      "code": "quota_exhausted",
+      "layer": "agent_provider",
+      "message": "Usage limit reached.",
+      "mutation_possible": false,
+      "retry": "switch_agent",
+      "resets_at": "2026-09-27T07:00:00Z"
+    }
+  },
+  "auth": {
+    "state": "signed_in",
+    "method": "oauth"
+  },
+  "capabilities": [
+    "discuss",
+    "inspect",
+    "review",
+    "vision"
+  ],
+  "roles": [
+    "reviewer",
+    "critic"
+  ],
+  "quota": {
+    "state": "exhausted",
+    "resets_at": "2026-09-27T07:00:00Z"
+  },
+  "activity": "waiting for quota reset",
+  "updated_at": "2026-09-27T02:24:00.194Z"
+}

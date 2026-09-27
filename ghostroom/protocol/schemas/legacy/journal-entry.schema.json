@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/legacy/journal-entry.schema.json",
+  "title": "Legacy: device bridge journal entry, flattened",
+  "description": "journal.json maps job_id -> entry (agent/runtime/core.py:115-116, 133-134, 65-66); diagnostics.commands exposes [job_id, entry] pairs (core.py:266). This is the flattened {job_id, ...entry} form used for mapping.",
+  "type": "object",
+  "required": ["job_id", "operation", "state", "started_at", "digest"],
+  "additionalProperties": false,
+  "properties": {
+    "job_id": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{8,80}$" },
+    "operation": { "type": ["string", "null"] },
+    "state": { "enum": ["running", "completed", "failed", "uncertain"] },
+    "started_at": { "type": "number" },
+    "ended_at": { "type": "number" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "error": { "const": "app_restarted_during_command" }
+  },
+  "allOf": [
+    { "if": { "properties": { "state": { "enum": ["completed", "failed"] } } }, "then": { "required": ["ended_at"] } },
+    { "if": { "properties": { "state": { "const": "uncertain" } } }, "then": { "required": ["error"] } }
+  ]
+}

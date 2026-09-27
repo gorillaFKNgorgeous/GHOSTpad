@@ -1,0 +1,18 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-wait-0001",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "ghostblender",
+    "id": "bridge"
+  },
+  "lane": "ghostblender",
+  "kind": "wait",
+  "parent": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "status": "progress",
+  "body": {
+    "on": "blender",
+    "label": "Capturing viewport",
+    "fraction": 0.5
+  }
+}

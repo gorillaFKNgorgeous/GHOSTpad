@@ -1,0 +1,8 @@
+{
+  "why": "unknown artifact type",
+  "base": "artifact/render.json",
+  "expect": "type: 'gif' is not one of",
+  "set": {
+    "/type": "gif"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "why": "media uri must not be an absolute URL (could leak a capability URL)",
+  "base": "artifact/screenshot.json",
+  "expect": "media/uri:",
+  "set": {
+    "/media/uri": "https://example.invalid/secret-token/shot.png"
+  }
+}

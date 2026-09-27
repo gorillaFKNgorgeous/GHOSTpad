@@ -1,0 +1,8 @@
+{
+  "why": "relay requires 32 lowercase hex ids (store.py:14)",
+  "base": "legacy/chat-request/one_pending.json",
+  "expect": "does not match '^[a-f0-9]{32}$'",
+  "set": {
+    "/messages/0/id": "3F1C9A0D6B2E4F7A8C5D1E0B9A8F7C6D"
+  }
+}

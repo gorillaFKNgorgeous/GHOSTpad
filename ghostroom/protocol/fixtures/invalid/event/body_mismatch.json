@@ -1,0 +1,11 @@
+{
+  "why": "inspect body needs a target, not a discuss body",
+  "base": "event/inspect_scene.json",
+  "expect": "body: 'target' is a required",
+  "set": {
+    "/body": {
+      "role": "assistant",
+      "text": "hi"
+    }
+  }
+}

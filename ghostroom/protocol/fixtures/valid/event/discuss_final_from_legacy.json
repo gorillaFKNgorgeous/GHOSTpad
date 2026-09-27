@@ -1,0 +1,38 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-final-0042",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "lane": "codex",
+  "kind": "discuss",
+  "parent": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "status": "completed",
+  "body": {
+    "role": "assistant",
+    "text": "The active object is GB_Rig (ARMATURE).",
+    "format": "plain"
+  },
+  "stream": {
+    "stream_id": "relaydb-7Qm2xK9p",
+    "seq": 42
+  },
+  "correlation": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "evidence": [
+    {
+      "type": "job",
+      "job_id": "5a6a2612cd614283b715ee31b4d2f4d8",
+      "operation": "read_script",
+      "state": "completed",
+      "device_digest": "cfab15f2627c867d200a45e4776c4406e3b1a1f482e293de9032cd2456478877",
+      "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+      "boot_id": "2f034d002d1f42c989ffd2ad95171a60",
+      "started_at": "2026-09-27T02:23:57.786Z",
+      "ended_at": "2026-09-27T02:23:57.807Z"
+    }
+  ]
+}

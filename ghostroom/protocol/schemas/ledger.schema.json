@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/ledger.schema.json",
+  "title": "GHOSTroom shared workspace ledger entry",
+  "description": "Agent-neutral, append-only record of meaningful project activity. Entries summarise and point at evidence (job digests, artifacts, events). They never copy tool payloads such as code, stdout, scene dumps or images.",
+  "type": "object",
+  "required": ["entry_id", "seq", "timestamp", "origin", "category", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "entry_id": { "$ref": "common.schema.json#/$defs/id" },
+    "seq": {
+      "description": "Monotonic position in this ledger (stream).",
+      "$ref": "common.schema.json#/$defs/stream_position"
+    },
+    "timestamp": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "origin": { "$ref": "common.schema.json#/$defs/origin" },
+    "lane": { "$ref": "common.schema.json#/$defs/lane" },
+    "category": {
+      "enum": [
+        "instruction", "response", "task", "tool_call", "mutation", "inspection",
+        "evidence", "file", "checkpoint", "failure", "warning", "decision",
+        "review", "handoff", "question", "summary"
+      ]
+    },
+    "summary": {
+      "description": "Short, self-contained statement another agent can read without the originating lane.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "rationale": {
+      "description": "Why: needed for decisions, abandonments and handoffs.",
+      "type": "string",
+      "maxLength": 4000
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/id" }
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "common.schema.json#/$defs/evidence_ref" }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/id" }
+    },
+    "scene_id": { "$ref": "common.schema.json#/$defs/blender_id" },
+    "lease_id": { "$ref": "common.schema.json#/$defs/id" },
+    "failure": { "$ref": "failure.schema.json" },
+    "supersedes": {
+      "description": "entry_id this entry corrects or replaces. The ledger is append-only; nothing is edited in place.",
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "state_of_work"],
+      "properties": {
+        "from": { "$ref": "common.schema.json#/$defs/id_or_name" },
+        "to": { "$ref": "common.schema.json#/$defs/id_or_name" },
+        "state_of_work": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "open_questions": { "type": "array", "items": { "type": "string", "maxLength": 1000 } },
+        "next_steps": { "type": "array", "items": { "type": "string", "maxLength": 1000 } }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "Tool calls and mutations must reference the GhostBlender job(s) they are about.",
+      "if": { "properties": { "category": { "enum": ["tool_call", "mutation", "inspection"] } } },
+      "then": {
+        "required": ["evidence"],
+        "properties": {
+          "evidence": { "contains": { "$ref": "common.schema.json#/$defs/job_evidence" } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "category": { "const": "mutation" } } },
+      "then": { "required": ["scene_id"] }
+    },
+    {
+      "if": { "properties": { "category": { "const": "failure" } } },
+      "then": { "required": ["failure"] }
+    },
+    {
+      "if": { "properties": { "category": { "const": "decision" } } },
+      "then": { "required": ["rationale"] }
+    },
+    {
+      "if": { "properties": { "category": { "const": "handoff" } } },
+      "then": { "required": ["handoff"] }
+    },
+    {
+      "if": { "properties": { "category": { "const": "checkpoint" } } },
+      "then": { "required": ["artifacts"], "properties": { "artifacts": { "minItems": 1 } } }
+    }
+  ]
+}

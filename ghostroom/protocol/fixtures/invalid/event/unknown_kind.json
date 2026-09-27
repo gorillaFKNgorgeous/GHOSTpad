@@ -1,0 +1,8 @@
+{
+  "why": "kind must be one of the seven kinds",
+  "base": "event/inspect_scene.json",
+  "expect": "'chat' is not one of",
+  "set": {
+    "/kind": "chat"
+  }
+}

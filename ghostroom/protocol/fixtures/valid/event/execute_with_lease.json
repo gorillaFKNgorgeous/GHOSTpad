@@ -1,0 +1,33 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-exec-0001",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "lane": "codex",
+  "kind": "execute",
+  "parent": "evt-plan-0001",
+  "status": "completed",
+  "body": {
+    "summary": "Ran gb_cloth_bake.finish()",
+    "mutation": "confirmed",
+    "lease_id": "lease-0001-scene",
+    "progress_label": "Applying cloth keys"
+  },
+  "evidence": [
+    {
+      "type": "job",
+      "job_id": "fixture-exec-python-0001",
+      "operation": "execute_python",
+      "state": "completed",
+      "device_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "relay_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "started_at": "2026-09-25T13:34:09.059Z",
+      "ended_at": "2026-09-25T13:34:09.066Z"
+    }
+  ]
+}

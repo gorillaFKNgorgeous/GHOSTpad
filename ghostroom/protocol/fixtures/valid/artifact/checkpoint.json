@@ -1,0 +1,30 @@
+{
+  "artifact_id": "ckpt-0001",
+  "type": "checkpoint",
+  "created_at": "2026-09-27T02:24:00.194Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "label": "Before cloth rebake",
+  "method": "save_as_copy",
+  "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+  "file": {
+    "path": "GhostBoy_ckpt_0001.blend",
+    "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "bytes": 48213376
+  },
+  "known_good": true,
+  "evidence": {
+    "type": "job",
+    "job_id": "fixture-exec-python-0001",
+    "operation": "execute_python",
+    "state": "completed",
+    "device_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "relay_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "started_at": "2026-09-25T13:34:09.059Z",
+    "ended_at": "2026-09-25T13:34:09.066Z"
+  }
+}

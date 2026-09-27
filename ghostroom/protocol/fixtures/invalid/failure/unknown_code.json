@@ -1,0 +1,8 @@
+{
+  "why": "codes are a closed set",
+  "base": "failure/scene_changed.json",
+  "expect": "'ai_error' is not one of",
+  "set": {
+    "/code": "ai_error"
+  }
+}

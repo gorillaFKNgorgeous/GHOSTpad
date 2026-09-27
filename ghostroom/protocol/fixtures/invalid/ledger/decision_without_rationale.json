@@ -1,0 +1,8 @@
+{
+  "why": "decisions must say why",
+  "base": "ledger/decision.json",
+  "expect": "'rationale' is a required",
+  "remove": [
+    "/rationale"
+  ]
+}

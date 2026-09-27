@@ -1,0 +1,8 @@
+{
+  "why": "leases always expire",
+  "base": "lease/active_scene.json",
+  "expect": "'expires_at' is a required",
+  "remove": [
+    "/expires_at"
+  ]
+}

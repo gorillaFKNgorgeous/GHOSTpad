@@ -1,0 +1,31 @@
+{
+  "entry_id": "led-0005",
+  "seq": {
+    "stream_id": "ledger-main-0001",
+    "seq": 5
+  },
+  "timestamp": "2026-09-27T02:32:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "category": "handoff",
+  "summary": "Handing cloth review to Claude.",
+  "handoff": {
+    "from": "codex",
+    "to": "claude",
+    "state_of_work": "Bake done; loop seam 9.1 deg.",
+    "open_questions": [
+      "Is 9 deg acceptable?"
+    ],
+    "next_steps": [
+      "Review seam",
+      "Re-export GLB"
+    ]
+  },
+  "artifacts": [
+    "card-0001"
+  ]
+}

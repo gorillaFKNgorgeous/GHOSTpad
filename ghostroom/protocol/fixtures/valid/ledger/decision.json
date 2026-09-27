@@ -1,0 +1,19 @@
+{
+  "entry_id": "led-0004",
+  "seq": {
+    "stream_id": "ledger-main-0001",
+    "seq": 4
+  },
+  "timestamp": "2026-09-27T02:31:00.000Z",
+  "origin": {
+    "kind": "user",
+    "id": "owner",
+    "display_name": "Owner"
+  },
+  "category": "decision",
+  "summary": "Abandon the Head-only skin cloth setup.",
+  "rationale": "Arms snagged the sheet on mid-move starts; a one-cycle pre-roll fixed it instead.",
+  "events": [
+    "evt-ask-0001"
+  ]
+}

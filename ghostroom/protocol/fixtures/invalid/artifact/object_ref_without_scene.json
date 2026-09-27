@@ -1,0 +1,8 @@
+{
+  "why": "an object name is meaningless without its scene_id",
+  "base": "artifact/object_ref.json",
+  "expect": "'scene_id' is a required",
+  "remove": [
+    "/scene_id"
+  ]
+}

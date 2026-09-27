@@ -1,0 +1,22 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-status-0041",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "relay",
+    "id": "relay"
+  },
+  "lane": "relay",
+  "kind": "wait",
+  "parent": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "status": "started",
+  "body": {
+    "on": "agent",
+    "label": "AI working"
+  },
+  "stream": {
+    "stream_id": "relaydb-7Qm2xK9p",
+    "seq": 41
+  },
+  "correlation": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d"
+}

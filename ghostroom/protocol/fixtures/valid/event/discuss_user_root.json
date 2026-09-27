@@ -1,0 +1,19 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "user",
+    "id": "owner",
+    "display_name": "Owner"
+  },
+  "lane": "user",
+  "kind": "discuss",
+  "parent": null,
+  "status": "completed",
+  "body": {
+    "role": "user",
+    "text": "Inspect the scene and tell me the active object."
+  },
+  "correlation": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d"
+}

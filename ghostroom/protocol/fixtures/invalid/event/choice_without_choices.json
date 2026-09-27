@@ -1,0 +1,8 @@
+{
+  "why": "input=choice requires choices",
+  "base": "event/request_input_choice.json",
+  "expect": "body: 'choices' is a required",
+  "remove": [
+    "/body/choices"
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/legacy/chat-reply.schema.json",
+  "title": "Legacy: relay -> device chat extension (protocol 1)",
+  "description": "Shape returned today by agent/relay/store.py:241-256. Event rows come from chat_events (store.py:39-41) with type limited by store.py:51. Relays with the cursor fix (PR #3) add stream_id and reset; older relays omit both.",
+  "type": "object",
+  "required": [
+    "cursor",
+    "ack_ids",
+    "events"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "cursor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ack_ids": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{32}$"
+      }
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": [
+          "seq",
+          "message_id",
+          "type",
+          "text"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "message_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "enum": [
+              "status",
+              "final",
+              "error"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      }
+    },
+    "stream_id": {
+      "description": "Random id of this relay database's chat_events sequence; changes when the database is replaced.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "reset": {
+      "description": "True when the request cursor belonged to another stream or exceeded every seq issued here; events then restart from seq 1 and the device must reset its cursor.",
+      "type": "boolean"
+    }
+  },
+  "dependentRequired": {
+    "reset": [
+      "stream_id"
+    ],
+    "stream_id": [
+      "reset"
+    ]
+  }
+}

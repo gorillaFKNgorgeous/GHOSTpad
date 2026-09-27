@@ -1,0 +1,8 @@
+{
+  "why": "revoked lease must record who revoked it",
+  "base": "lease/revoked_objects.json",
+  "expect": "'revoked_by' is a required",
+  "remove": [
+    "/revoked_by"
+  ]
+}

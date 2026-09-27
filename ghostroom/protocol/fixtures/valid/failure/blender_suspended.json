@@ -1,0 +1,8 @@
+{
+  "code": "blender_suspended",
+  "layer": "bridge",
+  "message": "GHOSTpad is in the background.",
+  "mutation_possible": false,
+  "retry": "after_user_action",
+  "legacy_error": "device_offline_or_suspended"
+}

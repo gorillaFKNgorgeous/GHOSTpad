@@ -1,0 +1,13 @@
+{
+  "why": "mutations must reference the GhostBlender job",
+  "base": "ledger/mutation.json",
+  "expect": "does not contain items",
+  "set": {
+    "/evidence": [
+      {
+        "type": "event",
+        "event_id": "evt-exec-0001"
+      }
+    ]
+  }
+}

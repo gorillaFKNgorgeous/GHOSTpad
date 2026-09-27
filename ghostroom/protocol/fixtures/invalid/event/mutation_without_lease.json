@@ -1,0 +1,8 @@
+{
+  "why": "a possibly-mutating execute must name its lease",
+  "base": "event/execute_with_lease.json",
+  "expect": "body: 'lease_id' is a required",
+  "remove": [
+    "/body/lease_id"
+  ]
+}

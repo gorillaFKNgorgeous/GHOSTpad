@@ -1,0 +1,31 @@
+{
+  "entry_id": "led-0001",
+  "seq": {
+    "stream_id": "ledger-main-0001",
+    "seq": 1
+  },
+  "timestamp": "2026-09-27T02:23:57.807Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "lane": "codex",
+  "category": "inspection",
+  "summary": "Read hero_retarget.py (22103 bytes, sha256 9ca24985…) from the device script workspace.",
+  "evidence": [
+    {
+      "type": "job",
+      "job_id": "5a6a2612cd614283b715ee31b4d2f4d8",
+      "operation": "read_script",
+      "state": "completed",
+      "device_digest": "cfab15f2627c867d200a45e4776c4406e3b1a1f482e293de9032cd2456478877",
+      "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+      "boot_id": "2f034d002d1f42c989ffd2ad95171a60",
+      "started_at": "2026-09-27T02:23:57.786Z",
+      "ended_at": "2026-09-27T02:23:57.807Z"
+    }
+  ],
+  "scene_id": "e6072cdd2e354163a5b3922058174f7f"
+}

@@ -1,0 +1,28 @@
+{
+  "agent_id": "codex",
+  "display_name": "Codex",
+  "provider": "codex",
+  "lane": "codex",
+  "availability": {
+    "state": "available",
+    "checked_at": "2026-09-27T02:24:00.194Z"
+  },
+  "auth": {
+    "state": "signed_in",
+    "method": "device_code"
+  },
+  "capabilities": [
+    "discuss",
+    "inspect",
+    "execute",
+    "capture",
+    "vision"
+  ],
+  "roles": [
+    "primary"
+  ],
+  "quota": {
+    "state": "unknown"
+  },
+  "updated_at": "2026-09-27T02:24:00.194Z"
+}

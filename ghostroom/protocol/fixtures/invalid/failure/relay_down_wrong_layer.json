@@ -1,0 +1,8 @@
+{
+  "why": "relay_unavailable is a relay-layer failure",
+  "base": "failure/relay_unavailable.json",
+  "expect": "layer: 'relay' was expected",
+  "set": {
+    "/layer": "blender"
+  }
+}

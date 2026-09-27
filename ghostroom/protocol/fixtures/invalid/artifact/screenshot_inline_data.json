@@ -1,0 +1,8 @@
+{
+  "why": "media is referenced by hash/uri, never inlined",
+  "base": "artifact/screenshot.json",
+  "expect": "('data' was unexpected)",
+  "set": {
+    "/media/data": "iVBORw0KGgo="
+  }
+}

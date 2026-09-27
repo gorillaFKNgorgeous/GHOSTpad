@@ -1,0 +1,25 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-plan-0001",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "lane": "codex",
+  "kind": "plan",
+  "parent": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "status": "completed",
+  "body": {
+    "summary": "Bake cloth onto Mask skirt bones for Walk_Swagger.",
+    "steps": [
+      "prepare()",
+      "setup('Walk_Swagger')",
+      "step(120) until done",
+      "finish() and review"
+    ],
+    "mutates": true
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "job_id": "00000000000000000000000000000f01",
+  "state": "failed",
+  "operation": "execute_python",
+  "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+  "created_at": 1790343312.3,
+  "result": {
+    "ok": false,
+    "error": "RuntimeError: TimeoutError: Python time limit reached; partial edits may exist\n",
+    "traceback": "Traceback (most recent call last): ..."
+  }
+}

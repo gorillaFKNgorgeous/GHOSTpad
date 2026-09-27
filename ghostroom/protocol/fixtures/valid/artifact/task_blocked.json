@@ -1,0 +1,18 @@
+{
+  "artifact_id": "task-0001",
+  "type": "task",
+  "created_at": "2026-09-27T02:24:00.194Z",
+  "origin": {
+    "kind": "user",
+    "id": "owner",
+    "display_name": "Owner"
+  },
+  "title": "Retarget Dance_Foo onto GB_Rig",
+  "state": "blocked",
+  "assignee": "codex",
+  "role": "primary",
+  "depends_on": [
+    "task-0000"
+  ],
+  "reason": "Source armature has no Hips bone; waiting for a new FBX."
+}

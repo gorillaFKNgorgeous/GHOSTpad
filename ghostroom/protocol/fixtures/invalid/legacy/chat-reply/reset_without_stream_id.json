@@ -1,0 +1,8 @@
+{
+  "why": "reset is only meaningful with the stream_id the device must adopt",
+  "base": "legacy/chat-reply/reset_after_database_replaced.json",
+  "remove": [
+    "/stream_id"
+  ],
+  "expect": "'stream_id' is a dependency of 'reset'"
+}

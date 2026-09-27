@@ -2,24 +2,46 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/legacy/chat-request.schema.json",
   "title": "Legacy: device -> relay chat extension (protocol 1)",
-  "description": "Shape sent today by agent/runtime/insight.py:59-64 and the live ghostblender_insight.py shim. Validated by agent/relay/store.py:200-225.",
+  "description": "Shape sent today by agent/runtime/insight.py:59-64 and the live ghostblender_insight.py shim. Validated by agent/relay/store.py:200-225. Since the cursor fix, the device also sends the relay's stream_id once it knows it.",
   "type": "object",
-  "required": ["cursor", "messages"],
+  "required": [
+    "cursor",
+    "messages"
+  ],
   "additionalProperties": false,
   "properties": {
-    "cursor": { "type": "integer", "minimum": 0 },
+    "cursor": {
+      "type": "integer",
+      "minimum": 0
+    },
     "messages": {
       "type": "array",
       "maxItems": 4,
       "items": {
         "type": "object",
-        "required": ["id", "text"],
+        "required": [
+          "id",
+          "text"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
-          "text": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "\\S" }
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S"
+          }
         }
       }
+    },
+    "stream_id": {
+      "description": "Relay chat stream the cursor belongs to (agent/runtime/insight.py chat_payload). Absent from the live ghostblender_insight.py shim.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
     }
   }
 }

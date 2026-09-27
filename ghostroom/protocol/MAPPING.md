@@ -31,7 +31,8 @@ yet.
 ## 2. Chat event `{seq, message_id, type, text}` (relay → device)
 
 All three types get `correlation = message_id`, `parent = message_id` (the
-user message event), and `stream = {stream_id: <gap>, seq}`.
+user message event), and `stream = {stream_id: reply.stream_id, seq}`. The
+relay has sent `stream_id` since the cursor fix; older relays leave a gap.
 
 | `type` | `kind` | `status` | `origin` | `body` |
 | --- | --- | --- | --- | --- |
@@ -57,9 +58,9 @@ Gaps:
   is discussing, inspecting or executing. GHOSTroom `inspect`/`execute`
   events for an agent's turn would need the worker to report its MCP tool
   calls (the Codex SDK streams these; `chat.py` discards them).
-- **No `stream_id`.** See CURRENT-SHAPES §7: the device cannot detect a
-  sequence restart. GHOSTroom requires `stream.stream_id` so consumers reset
-  instead of skipping.
+- **`stream_id` (fixed).** CURRENT-SHAPES §7: the relay now sends a
+  per-database `stream_id` plus `reset`, and the bundled `insight.py` resets
+  its cursor on either. The live shim still lacks it.
 - No intermediate assistant text, no artifacts (captures the agent took stay
   inside Codex's thread), and no evidence references from a chat turn to the
   jobs it caused. The link has to be rebuilt from timing.

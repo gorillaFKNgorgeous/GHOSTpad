@@ -43,8 +43,16 @@ class Store:
                 ON chat_events(device_id, seq);
             CREATE TABLE IF NOT EXISTS chat_state (
                 device_id TEXT PRIMARY KEY, thread_id TEXT, updated REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS relay_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         ''')
+        # Identifies this database's chat_events sequence. A new or replaced
+        # database gets a new id, so devices can tell that seq restarted.
+        self.db.execute('INSERT OR IGNORE INTO relay_meta VALUES (?,?)',
+                        ('chat_stream_id', uuid.uuid4().hex))
         self.db.commit()
+        self.chat_stream_id = self.db.execute(
+            "SELECT value FROM relay_meta WHERE key='chat_stream_id'"
+        ).fetchone()[0]
         self._recover_chat()
 
     def _chat_event_locked(self, device_id, message_id, event_type, text):
@@ -202,16 +210,26 @@ class Store:
             raise ValueError('invalid_chat_payload')
         cursor = chat.get('cursor', 0)
         messages = chat.get('messages', [])
+        stream_id = chat.get('stream_id')
         if type(cursor) is not int or cursor < 0 or not isinstance(messages, list) or len(messages) > 4:
             raise ValueError('invalid_chat_payload')
 
         ack_ids = []
         with self.lock, self.db:
-            max_seq = self.db.execute(
-                'SELECT COALESCE(MAX(seq),0) FROM chat_events WHERE device_id=?',
-                (device_id,),
-            ).fetchone()[0]
-            cursor = min(cursor, int(max_seq))
+            # High-water mark of every seq this database has issued. Pruned rows
+            # do not lower it, because AUTOINCREMENT never reuses a seq.
+            row = self.db.execute(
+                "SELECT seq FROM sqlite_sequence WHERE name='chat_events'"
+            ).fetchone()
+            issued = int(row[0]) if row else 0
+            # A cursor from another stream, or beyond anything issued here, came
+            # from a different or rolled-back database. Replay from the start
+            # and tell the device to reset instead of silently skipping events.
+            # Any unrecognised stream_id counts as another stream; it must not
+            # fail the exchange, which also carries Blender jobs.
+            reset = cursor > issued or (stream_id is not None and stream_id != self.chat_stream_id)
+            if reset:
+                cursor = 0
             for item in messages:
                 if not isinstance(item, dict) or set(item) != {'id', 'text'}:
                     raise ValueError('invalid_chat_message')
@@ -253,7 +271,8 @@ class Store:
                 for row in rows
             ]
             next_cursor = rows[-1]['seq'] if rows else cursor
-            return {'cursor': next_cursor, 'ack_ids': ack_ids, 'events': events}
+            return {'cursor': next_cursor, 'ack_ids': ack_ids, 'events': events,
+                    'stream_id': self.chat_stream_id, 'reset': reset}
 
     def chat_claim(self, device_id):
         with self.lock, self.db:

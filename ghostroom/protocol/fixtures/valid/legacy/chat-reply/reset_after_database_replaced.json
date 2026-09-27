@@ -1,0 +1,14 @@
+{
+  "cursor": 1,
+  "ack_ids": [],
+  "events": [
+    {
+      "seq": 1,
+      "message_id": null,
+      "type": "final",
+      "text": "The active object is GB_Rig."
+    }
+  ],
+  "stream_id": "9b2d6c1e4f7a40c8a1d3e5f7b9c0d2e4",
+  "reset": true
+}

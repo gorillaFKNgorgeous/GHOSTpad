@@ -39,10 +39,13 @@ A fresh session should be able to resume from this file alone.
 ## Next (awaiting approval; nothing started)
 
 - Stopped after Step 3 as instructed. No UI or relay work yet.
+- [x] **Cursor skip fix** (approved): relay `stream_id` + `reset` in chat
+      replies (`agent/relay/store.py`), bundled `insight.py` resets its
+      cursor on either, tests in `agent/tests/test_chat_cursor.py`. Takes
+      effect on the device only after a relay redeploy **and** an IPA that
+      bundles `insight.py`. The live shim is unchanged (see CURRENT-SHAPES §7).
 - Candidate next steps, in the order I'd suggest:
-  1. Fix the chat cursor skip (`stream_id` in the relay chat reply, device
-     resets when it changes). Small; touches `agent/relay/store.py` and
-     `agent/runtime/insight.py`, so it needs approval.
+  1. (done: cursor fix)
   2. Relay adapter that emits `ghostroom/0` events and ledger entries from
      the existing chat and job tables (read-only projection, no behavior
      change).
@@ -61,12 +64,9 @@ Read `docs/ghostroom/CURRENT-SHAPES.md` (today), then
 
 ## Open questions
 
-1. **Cursor skip (CURRENT-SHAPES §7)**: the relay can answer a device cursor
-   that is ahead of its own `MAX(seq)` with a clamped cursor and no events,
-   and the device keeps its higher cursor. After a relay database reset, all
-   events up to the old cursor are skipped silently. Proposed fix: a
-   `stream_id` per relay database, and the device resets its cursor when the
-   id changes. Not applied, because relay/runtime changes need approval.
+1. **Cursor skip**: fixed for the relay and the bundled `insight.py`. Open:
+   should the live `ghostblender_insight.py` shim be patched too? That needs
+   an approved `write_script`. Otherwise it stays affected until the next IPA.
 2. Could not confirm read-only whether the deployed relay currently returns
    the `chat` extension. That needs `execute_python` on the device, or relay
    logs.

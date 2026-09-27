@@ -16,6 +16,7 @@ _REPORTS = {}
 _MESSAGES = []
 _NEXT_MESSAGE_ID = 1
 _CHAT_CURSOR = 0
+_CHAT_STREAM = None
 _CHAT_STATUS = "Waiting for chat relay"
 _CHAT_ONLINE = False
 _PENDING = []
@@ -58,15 +59,18 @@ def _redraw():
 
 def chat_payload():
     """Return the chat extension added to the next normal device heartbeat."""
-    return {
+    payload = {
         "cursor": _CHAT_CURSOR,
         "messages": [dict(_PENDING[0])] if _PENDING else [],
     }
+    if _CHAT_STREAM is not None:
+        payload["stream_id"] = _CHAT_STREAM
+    return payload
 
 
 def apply_chat(chat):
     """Consume a chat extension from a normal relay response on Blender's main thread."""
-    global _CHAT_CURSOR, _CHAT_ONLINE, _CHAT_STATUS
+    global _CHAT_CURSOR, _CHAT_ONLINE, _CHAT_STATUS, _CHAT_STREAM
     if chat is None:
         _CHAT_ONLINE = False
         _CHAT_STATUS = "Chat service unavailable on relay"
@@ -79,6 +83,16 @@ def apply_chat(chat):
         return
 
     _CHAT_ONLINE = True
+    # The cursor is only meaningful within one relay event stream. If the relay
+    # reports a different stream (new or replaced database) or asks for a
+    # reset, start again from 0 so its events are not skipped as already seen.
+    stream_id = chat.get("stream_id")
+    if chat.get("reset") is True or (
+        isinstance(stream_id, str) and _CHAT_STREAM is not None and stream_id != _CHAT_STREAM
+    ):
+        _CHAT_CURSOR = 0
+    if isinstance(stream_id, str):
+        _CHAT_STREAM = stream_id
     for message_id in chat.get("ack_ids", []):
         _PENDING[:] = [message for message in _PENDING if message["id"] != message_id]
 

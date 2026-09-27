@@ -177,7 +177,8 @@ At most one pending message is sent per request (UI blocks a second send,
 
 ```json
 {"cursor": <int>, "ack_ids": ["<id>", …],
- "events": [{"seq": <int>, "message_id": "<id>|null", "type": "status|final|error", "text": "…"}]}
+ "events": [{"seq": <int>, "message_id": "<id>|null", "type": "status|final|error", "text": "…"}],
+ "stream_id": "<32 hex>", "reset": <bool>}   // stream_id/reset: added by the §7 fix
 ```
 
 Event `type` is enforced to `status|final|error` (`store.py:51`); text is
@@ -251,11 +252,36 @@ Related gaps (not skips):
   modules consume the same reply with independent cursors. The shim should be
   removed when the bundled companion ships.
 
-Proposed fix (for Step 2+, not applied): the relay adds a stable
-`stream_id` (random per database, stored once) to every chat reply; the device
-resets its cursor to 0 when `stream_id` changes or when `reply.cursor <
-request.cursor`. The GHOSTroom protocol carries this as `stream_id` on the
-cursor contract.
+**Fixed (branch `claude/ghostroom-protocol-groundwork-moht84`, after this
+audit; line numbers above refer to the pre-fix tree):**
+
+- The relay stores a random `chat_stream_id` once per database
+  (`relay_meta` table) and adds `stream_id` and `reset` to every chat reply.
+- It resets the request cursor to 0, replays from seq 1 and returns
+  `reset: true` when the cursor exceeds every seq the database has **ever
+  issued** (`sqlite_sequence`, so 7-day pruning never triggers it) or when
+  the request's `stream_id` differs from its own. A malformed `stream_id`
+  counts as different; it never fails the exchange, which also carries jobs.
+- The bundled `insight.py` sends the last `stream_id` it saw and sets its
+  cursor to 0 when the relay reports a different stream or `reset: true`.
+- Tests: `agent/tests/test_chat_cursor.py`. The end-to-end test replays this
+  exact scenario (cursor 60, database replaced, one new reply). It fails on
+  the pre-fix code and passes now.
+
+Remaining limits:
+
+- The live `ghostblender_insight.py` shim is unchanged. It sends no
+  `stream_id` and keeps `max(cursor)`, so it still skips events after a relay
+  reset. Until new events pass its old cursor, the relay resends the replay
+  page (≤50 events) on each heartbeat. Updating it needs `write_script` on the
+  device, which has not been approved. The next IPA replaces it with the
+  bundled module.
+- Restoring a relay backup keeps the old `stream_id`. A device cursor within
+  the restored range replays nothing: events it had already seen are fine,
+  but events written after the backup was taken are lost with the backup.
+- Replaying after a reset can show earlier events again if the replaced
+  database had history the device already displayed. That is preferred over
+  skipping.
 
 ## 8. Live observations
 

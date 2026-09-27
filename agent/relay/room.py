@@ -10,6 +10,7 @@ from extra model chatter.
 import base64
 import json
 import re
+import secrets
 import time
 
 from store import LEGACY, NOTE_CATEGORIES, OWNER, ROOM_TEXT, TASK_MODES, TASK_ROLES, rfc3339, task_title
@@ -130,8 +131,9 @@ def is_noise(entry):
 class Room:
     """The GHOSTroom side of the relay for one device."""
 
-    def __init__(self, store, device_id, router=None):
+    def __init__(self, store, device_id, router=None, public_origin=None):
         self.store, self.device_id, self.router = store, device_id, router
+        self.public_origin = public_origin
 
     # ------------------------------------------------------------------ exchange
 
@@ -181,7 +183,11 @@ class Room:
             'ledger_cursor': rows[-1]['seq'] if rows else ledger_cursor, 'ledger': entries,
             'ack_ids': message_acks, 'control_acks': control_acks, 'artifact_acks': artifact_acks,
             'problems': problems,
-            'agents': self.router.describe() if self.router else [],
+            'agents': self.router.describe() if self.router else external_descriptors(store),
+            'setup': self.router.setup_states() if self.router else {},
+            'connectors': [{'participant_id': c['participant_id'], 'name': c['display_name'],
+                            'client': c['client_label'], 'last_seen': c['last_seen'], 'created': c['created']}
+                           for c in store.external_participants()],
             'default_agent': self.router.default_agent if self.router else None,
             'tasks': [_task_public(task) for task in store.tasks(device, 12)],
             'leases': [lease for lease in store.status(device).get('leases', []) if not lease['implicit']],
@@ -217,7 +223,8 @@ class Room:
         agent_id = message.get('agent_id') or (self.router.default_agent if self.router else None)
         if not agent_id:
             raise ValueError('no_agent_configured')
-        if self.router and not self.router.has(agent_id):
+        external = {c['participant_id'] for c in self.store.external_participants()}
+        if not (self.router and self.router.has(agent_id)) and agent_id not in external:
             raise ValueError('unknown_agent')
         mode, role = message.get('mode', 'do'), message.get('role', 'primary')
         if mode not in TASK_MODES or role not in TASK_ROLES:
@@ -233,19 +240,74 @@ class Room:
                 self.store.artifact(self.device_id, item['artifact_id'])  # must already be uploaded
                 clean['artifact_id'] = item['artifact_id']
             context.append(clean)
-        steerable = bool(self.router and self.router.can_steer(agent_id))
+        steerable = bool(self.router and self.router.can_steer(agent_id)) or agent_id in external
         return self.store.room_submit(self.device_id, message['id'], message.get('text', ''), agent_id, mode,
                                       role, context, running_steerable=steerable)
 
     def _accept_control(self, control):
         if not isinstance(control, dict) or not isinstance(control.get('id'), str):
             raise ValueError('invalid_control')
-        if control.get('action') == 'stop':
+        action = control.get('action')
+        if action == 'stop':
             result = self.store.room_stop(self.device_id, control['task_id'])
             if self.router and result == 'stopping':
                 self.router.interrupt(control['task_id'])
             return result
+        if action == 'agent_setup':
+            if not self.router:
+                raise ValueError('no_agent_router')
+            return self.router.setup(control.get('agent_id'), control.get('op'), control.get('secret'))
+        if action == 'connector_create':
+            return self._create_connector(control.get('name'))
+        if action == 'connector_revoke':
+            participant = control.get('participant_id')
+            if participant not in {c['participant_id'] for c in self.store.external_participants()} or \
+                    participant == LEGACY:
+                raise ValueError('unknown_connector')
+            self.store.revoke_participant(participant)
+            return 'revoked'
         raise ValueError('unknown_control')
+
+    def _create_connector(self, name):
+        """A personal MCP connector URL for one external agent (ChatGPT, Claude, …).
+
+        The capability is shown once, to the owner's own device; the relay keeps
+        only its digest. It maps to its own participant, so that agent's work is
+        attributed and its leases, stop and read-only rules apply to it alone.
+        """
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 60:
+            raise ValueError('invalid_connector_name')
+        if not self.public_origin:
+            raise ValueError('relay_public_origin_unknown')
+        slug = re.sub(r'[^a-z0-9]+', '-', name.strip().lower()).strip('-')[:40] or 'agent'
+        participant = f'{slug}-{secrets.token_hex(3)}'
+        capability = self.store.register_participant(participant, 'agent', name.strip(), provider='external')
+        return {'participant_id': participant, 'name': name.strip(),
+                'url': f'{self.public_origin.rstrip("/")}/mcp/p/{capability}'}
+
+
+def external_descriptors(store):
+    """Agents that connect from outside (GhostBlender Simple, personal connectors), as descriptors."""
+    now = time.time()
+    result = []
+    for item in store.external_participants():
+        if item['participant_id'] == LEGACY and not item['last_seen']:
+            continue
+        recent = item['last_seen'] and now - item['last_seen'] < 900
+        name = item['display_name'] if item['participant_id'] != LEGACY else 'GhostBlender Simple agent'
+        descriptor = {'agent_id': item['participant_id'], 'display_name': name[:200], 'provider': 'external',
+                      'lane': item['participant_id'],
+                      'availability': {'state': 'available' if recent else 'unknown', 'checked_at': rfc3339(now)},
+                      'auth': {'state': 'not_required', 'method': 'capability_url', 'checked_at': rfc3339(now)},
+                      'capabilities': ['discuss', 'inspect', 'plan', 'execute', 'capture', 'review'],
+                      'roles': ['primary', 'reviewer', 'specialist', 'critic', 'verifier'],
+                      'quota': {'state': 'unknown'}, 'updated_at': rfc3339(now)}
+        if item['client_label']:
+            descriptor['model'] = item['client_label'][:128]
+        descriptor['activity'] = ('Active through GhostBlender' if recent else
+                                  'Connects from outside; sees messages next time it calls room_read')
+        result.append(descriptor)
+    return result
 
 
 def _list(value, limit):

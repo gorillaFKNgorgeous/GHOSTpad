@@ -50,9 +50,30 @@ class ClaudeAdapter(AgentAdapter):
 
     # ------------------------------------------------------------------ config
 
-    @staticmethod
-    def api_key():
-        return os.environ.get('ANTHROPIC_API_KEY', '').strip()
+    setup_methods = ('api_key', 'sign_out')
+
+    def api_key(self):
+        # A key entered from GHOSTroom (relay volume) wins over the deployment environment.
+        stored = self.secrets.get('claude.api_key') if self.secrets is not None else None
+        return (stored or os.environ.get('ANTHROPIC_API_KEY', '')).strip()
+
+    def setup(self, op, value=None):
+        if self.secrets is None:
+            raise ValueError('secret_store_unavailable')
+        if op == 'api_key':
+            if not isinstance(value, str) or not 20 <= len(value.strip()) <= 400 or any(c.isspace() for c in value.strip()):
+                raise ValueError('invalid_api_key')
+            self.secrets.set('claude.api_key', value.strip())
+            self._last_auth_error = self._last_quota_error = False
+            return 'Claude API key saved on the relay'
+        if op == 'sign_out':
+            self.secrets.set('claude.api_key', None)
+            return 'Claude API key removed from the relay'
+        raise ValueError('setup_not_supported')
+
+    def setup_state(self):
+        return {'state': 'done' if self.api_key() else 'idle',
+                'message': 'API key set' if self.api_key() else 'Paste an Anthropic API key to enable Claude'}
 
     @staticmethod
     def model():
@@ -172,7 +193,7 @@ class ClaudeAdapter(AgentAdapter):
         if not self.api_key():
             return {'availability': 'unavailable', 'auth': 'signed_out', 'quota': 'unknown',
                     'reason': failure('auth_expired', 'agent_provider',
-                                      'Claude is not configured on the relay: set ANTHROPIC_API_KEY.',
+                                      'Claude is not configured: add an Anthropic API key in GHOSTroom (Agents).',
                                       False, 'after_user_action', agent_id=self.agent_id)}
         if self._last_auth_error:
             return {'availability': 'unavailable', 'auth': 'expired', 'quota': 'unknown', 'model': self.model(),

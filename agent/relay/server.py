@@ -41,7 +41,11 @@ and is serialized separately. read_ledger shows what every participant did.
 workspace_brief summarises the shared GHOSTroom workspace for joining or resuming
 work; post_note leaves decisions, reviews, handoffs and questions for everyone.
 Start execute_python code with a one-line comment naming the step: GHOSTroom
-shows it to the user as the current activity.'''
+shows it to the user as the current activity. GHOSTroom is the user's native
+workspace on the iPad and you are a full participant: call room_read first
+(conversation, your inbox, stop state), room_start to name or take your task,
+room_post kind=progress for short updates and kind=reply to answer. If your
+task shows stop_requested, stop working and reply briefly.'''
 
 
 def schema(properties=None, required=None):
@@ -116,6 +120,23 @@ def tools_list():
                                 'summary': string, 'rationale': string,
                                 'next_steps': {'type':'string'}, 'to': string}, ['category', 'summary']),
          'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'idempotentHint': False}},
+        {'name': 'room_read',
+         'description': 'Read GHOSTroom, the shared conversation on the iPad: messages from the user and every '
+                        'agent since after_seq, instructions addressed to you (inbox), your current task and '
+                        'whether the user stopped it. Call it when you start and between steps.',
+         'inputSchema': schema({'after_seq': {'type':'integer','minimum':0}}),
+         'annotations': {'readOnlyHint': True, 'idempotentHint': True}},
+        {'name': 'room_start',
+         'description': 'Tell GHOSTroom what you are working on. Pass task_id to take an instruction from your '
+                        'inbox, or title to name your current task. Your Blender jobs appear under it; the user '
+                        'can watch and stop it.',
+         'inputSchema': schema({'task_id': string, 'title': string}),
+         'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'idempotentHint': True}},
+        {'name': 'room_post',
+         'description': 'Speak in GHOSTroom. kind="progress" shows a short update on your current task; '
+                        'kind="reply" posts your answer to the user and finishes your current task.',
+         'inputSchema': schema({'text': string, 'kind': {'type':'string','enum':['reply','progress']}}, ['text']),
+         'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'idempotentHint': False}},
         {'name': 'read_ledger',
          'description': 'Read the shared workspace ledger: requests, outcomes, leases and failures from every '
                         'participant, oldest first. Pass the returned cursor as after_seq to continue.',
@@ -146,7 +167,7 @@ class App:
         self.store = Store(db_path)
         self.oauth = OAuth(self.store, origin, client_id, client_secret, owner_key, redirects)
         self.router = None
-        self.room = Room(self.store, device_id)
+        self.room = Room(self.store, device_id, public_origin=origin)
 
     def attach_router(self, router):
         """Enable embedded agents: GHOSTroom tasks are routed to the router's adapters."""
@@ -188,6 +209,14 @@ class App:
                                             args.get('duration_seconds', 120))
         if name == 'release_lease':
             return self.store.release_lease(self.device_id, participant, args['lease_id'])
+        if name == 'room_read':
+            return self.room_read(participant, args.get('after_seq', 0))
+        if name == 'room_start':
+            if not args.get('task_id') and not args.get('title'):
+                raise ValueError('task_id_or_title_required')
+            return self.store.room_start(self.device_id, participant, args.get('task_id'), args.get('title'))
+        if name == 'room_post':
+            return self.store.room_post(self.device_id, participant, args['text'], args.get('kind', 'reply'))
         if name == 'workspace_brief':
             return self.brief(args.get('since_seq', 0))
         if name == 'read_artifact':
@@ -211,6 +240,35 @@ class App:
         args = dict(args)
         return self.store.submit(self.device_id, name, args_without_meta(args), args['request_id'], args['scene_id'],
                                  participant, args.get('lease_id'))
+
+    def room_read(self, participant, after_seq=0):
+        events = self.store.room_events(self.device_id, after_seq, 60)
+        conversation = []
+        for event in events:
+            if event['type'] not in ('user', 'final', 'error', 'note', 'status', 'task'):
+                continue
+            item = {'seq': event['seq'], 'type': event['type'], 'task_id': event['task_id'],
+                    'from': 'user' if event['type'] == 'user' else (event['agent_id'] or 'agent'),
+                    'text': event['text'][:4000]}
+            payload = event.get('payload') or {}
+            if event['type'] == 'user':
+                item['to'] = payload.get('agent_id')
+                item['mode'], item['role'] = payload.get('mode'), payload.get('role')
+            if event['type'] == 'task':
+                item['state'] = payload.get('state')
+            conversation.append(item)
+        inbox = self.store.room_inbox(self.device_id, participant)
+        current = inbox['current_task']
+        return {'you': participant, 'conversation': conversation,
+                'cursor': events[-1]['seq'] if events else after_seq,
+                'inbox': [{'task_id': t['task_id'], 'text': t['text'], 'mode': t['mode'], 'role': t['role'],
+                           'context': t['context']} for t in inbox['inbox']],
+                'current_task': ({'task_id': current['task_id'], 'title': task_title(current['text']),
+                                  'stop_requested': current['stop_requested'], 'read_only': current['read_only']}
+                                 if current else None),
+                'agents': [{'agent_id': a['agent_id'], 'name': a['display_name'],
+                            'availability': a['availability']['state']} for a in (self.router.describe()
+                                                                                   if self.router else [])]}
 
     def brief(self, since_seq=0):
         router = getattr(self, 'router', None)
@@ -238,6 +296,7 @@ class App:
         if method == 'initialize':
             # clientInfo is self-reported. It is kept only as an unverified display
             # label and never decides identity, authorization or ownership.
+            self.store.touch_participant(participant)
             client = params.get('clientInfo')
             if isinstance(client, dict):
                 self.store.note_client_label(participant, ' '.join(
@@ -251,6 +310,7 @@ class App:
         elif method == 'tools/list':
             result = {'tools': TOOLS}
         elif method == 'tools/call':
+            self.store.touch_participant(participant)
             try:
                 value = self.call(params.get('name'), params.get('arguments', {}), participant)
                 image = None

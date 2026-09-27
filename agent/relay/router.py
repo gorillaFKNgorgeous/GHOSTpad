@@ -78,6 +78,18 @@ class AgentAdapter:
     capabilities = ('discuss', 'inspect', 'plan', 'execute', 'capture', 'review', 'long_running')
     roles = ('primary', 'reviewer', 'specialist', 'critic', 'verifier')
     can_steer = False
+    # Setup operations GHOSTroom offers for this agent: 'sign_in' (interactive
+    # provider sign-in), 'api_key' (paste a key), 'sign_out'.
+    setup_methods = ()
+    secrets = None
+
+    def setup(self, op, value=None):
+        """Run a setup operation requested from GHOSTroom. Returns a short status text."""
+        raise ValueError('setup_not_supported')
+
+    def setup_state(self):
+        """{'state': idle|pending|done|error, 'message', optional 'url', 'code'} for GHOSTroom."""
+        return {'state': 'idle'}
 
     def configure(self, store, device_id, mcp_url):
         self.store, self.device_id, self.mcp_url = store, device_id, mcp_url
@@ -102,7 +114,8 @@ class AgentAdapter:
 
 
 class AgentRouter:
-    def __init__(self, store, device_id, mcp_base, default_agent=None, poll_interval=0.25):
+    def __init__(self, store, device_id, mcp_base, default_agent=None, poll_interval=0.25, secrets=None):
+        self.secrets = secrets
         self.store, self.device_id, self.mcp_base = store, device_id, mcp_base.rstrip('/')
         self.poll_interval = poll_interval
         self.adapters, self._threads, self._running = {}, {}, {}
@@ -117,7 +130,10 @@ class AgentRouter:
         capability = self.store.ensure_participant_capability(
             adapter.participant_id, 'agent', adapter.display_name, provider=adapter.provider)
         adapter.configure(self.store, self.device_id, mcp_url or f'{self.mcp_base}/mcp/p/{capability}')
+        if adapter.secrets is None:
+            adapter.secrets = self.secrets
         self.adapters[adapter.agent_id] = adapter
+        self.store.embedded = frozenset(self.store.embedded | {adapter.participant_id})
         if self._default is None:
             self._default = adapter.agent_id
         self.store.default_agent = self.default_agent
@@ -129,6 +145,32 @@ class AgentRouter:
 
     def has(self, agent_id):
         return agent_id in self.adapters
+
+    # ------------------------------------------------------------------ setup from GHOSTroom
+
+    def setup(self, agent_id, op, secret=None):
+        adapter = self.adapters.get(agent_id)
+        if adapter is None:
+            raise ValueError('unknown_agent')
+        if op not in adapter.setup_methods:
+            raise ValueError('setup_not_supported')
+        message = adapter.setup(op, secret)
+        self._probes.pop(agent_id, None)  # show the new state at the next exchange
+        with self.store.lock, self.store.db:
+            self.store._ledger(self.device_id, 'owner', 'summary',
+                               f'{adapter.display_name}: {op.replace("_", " ")} requested from GHOSTroom')
+        return message
+
+    def setup_states(self):
+        states = {}
+        for agent_id, adapter in self.adapters.items():
+            try:
+                state = dict(adapter.setup_state() or {})
+            except Exception as exc:
+                state = {'state': 'error', 'message': type(exc).__name__}
+            state['methods'] = list(adapter.setup_methods)
+            states[agent_id] = state
+        return states
 
     def can_steer(self, agent_id):
         adapter = self.adapters.get(agent_id)
@@ -186,7 +228,10 @@ class AgentRouter:
         self._probes[agent_id] = (time.monotonic() - 30.0, state)
 
     def describe(self):
-        """Agent descriptors (agent.schema.json) for GHOSTroom and tools."""
+        """Agent descriptors (agent.schema.json) for GHOSTroom and tools, embedded then external."""
+        return self._describe_embedded() + room_service.external_descriptors(self.store)
+
+    def _describe_embedded(self):
         now = rfc3339(time.time())
         result = []
         for adapter in self.adapters.values():

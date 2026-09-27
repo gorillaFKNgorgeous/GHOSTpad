@@ -494,6 +494,44 @@ static UIImage *GRImageAt(NSString *path)
 
 @class GRController;
 
+/* GHOSTroom's own window, above Blender's. Blender's GHOSTUIWindow consumes hardware
+ * key presses (pressesBegan) and owns window-level gestures, so GHOSTroom must not
+ * live inside it: here text input and menus get a normal UIKit responder chain.
+ * Touches that land on no GHOSTroom view fall through to Blender's window below. */
+@interface GROverlayWindow : UIWindow
+@end
+
+@implementation GROverlayWindow
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event
+{
+  UIView *hit = [super hitTest:point withEvent:event];
+  if (hit == self || hit == self.rootViewController.view) {
+    return nil;
+  }
+  return hit;
+}
+@end
+
+@interface GROverlayRoot : UIViewController
+@end
+
+@implementation GROverlayRoot
+- (void)loadView
+{
+  UIView *view = [[UIView alloc] init];
+  view.backgroundColor = [UIColor clearColor];
+  self.view = view;
+}
+- (BOOL)prefersStatusBarHidden
+{
+  return YES;
+}
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations
+{
+  return UIInterfaceOrientationMaskAll;
+}
+@end
+
 @interface GRController : NSObject <UITableViewDataSource,
                                     UITableViewDelegate,
                                     UITextViewDelegate,
@@ -502,6 +540,311 @@ static UIImage *GRImageAt(NSString *path)
                                     UIGestureRecognizerDelegate>
 + (instancetype)shared;
 - (void)applySnapshot:(NSString *)json;
+@end
+
+
+/* ------------------------------------------------------------------------ agents & connections */
+
+/* Sign agents in, add or remove API keys and create personal connectors for external
+ * agents (ChatGPT, Claude, ...) without redeploying the relay. Credentials go straight
+ * to the relay through GhostBlender's authenticated exchange and are never shown again. */
+@interface GRAgentsSheet : UITableViewController
+@property(nonatomic, strong) NSDictionary *setup;
+- (void)refresh:(NSDictionary *)setup;
+@end
+
+@implementation GRAgentsSheet
+
+- (instancetype)init
+{
+  return [super initWithStyle:UITableViewStyleInsetGrouped];
+}
+
+- (void)viewDidLoad
+{
+  [super viewDidLoad];
+  self.title = @"Agents & connections";
+  self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+  self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
+      initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                           target:self
+                           action:@selector(done)];
+  self.tableView.rowHeight = UITableViewAutomaticDimension;
+  self.tableView.estimatedRowHeight = 64;
+}
+
+- (void)done
+{
+  [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)refresh:(NSDictionary *)setup
+{
+  if ([setup isEqual:self.setup]) {
+    return;
+  }
+  self.setup = setup;
+  if (self.isViewLoaded) {
+    [self.tableView reloadData];
+  }
+}
+
+- (NSArray *)agents
+{
+  NSMutableArray *rows = [NSMutableArray array];
+  for (NSDictionary *agent in GRArr(self.setup[@"agents"])) {
+    if (!GRBool(agent[@"external"])) {
+      [rows addObject:agent];
+    }
+  }
+  return rows;
+}
+
+- (NSArray *)connectors
+{
+  return GRArr(self.setup[@"connectors"]);
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+  return 2;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section
+{
+  return section == 0 ? @"Agents run by the relay" : @"External agents (connectors)";
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section
+{
+  if (section == 0) {
+    return @"Sign-in details and keys are stored only on your relay.";
+  }
+  NSDictionary *result = GRDict(self.setup[@"connector_result"]);
+  NSString *base = @"A connector URL lets ChatGPT, Claude or another MCP client join this GHOSTroom as its own "
+                   @"participant with full access. Its URL is shown once — copy it into the client's "
+                   @"connector settings.";
+  return result ? [NSString stringWithFormat:@"%@\n\n%@", GRStr(result[@"message"]), base] : base;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+  return section == 0 ? (NSInteger)[self agents].count : (NSInteger)[self connectors].count + 1;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+  UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
+                                                 reuseIdentifier:nil];
+  UIListContentConfiguration *content = [UIListContentConfiguration subtitleCellConfiguration];
+  content.secondaryTextProperties.numberOfLines = 0;
+  content.secondaryTextProperties.color = GRMuted();
+  if (indexPath.section == 0) {
+    NSDictionary *agent = [self agents][(NSUInteger)indexPath.row];
+    NSString *state = GRStr(agent[@"state"]);
+    NSMutableArray *lines = [NSMutableArray arrayWithObject:[NSString stringWithFormat:@"%@ · %@",
+                                                             state.capitalizedString,
+                                                             [GRStr(agent[@"auth"]) stringByReplacingOccurrencesOfString:@"_"
+                                                                                                           withString:@" "]]];
+    if (GRStr(agent[@"message"]).length) {
+      [lines addObject:GRStr(agent[@"message"])];
+    }
+    NSDictionary *result = GRDict(agent[@"result"]);
+    if (result && GRStr(result[@"message"]).length) {
+      [lines addObject:GRStr(result[@"message"])];
+    }
+    if (GRStr(agent[@"code"]).length) {
+      [lines addObject:[NSString stringWithFormat:@"Code: %@ — tap to open the sign-in page (code is copied)",
+                                                  GRStr(agent[@"code"])]];
+    }
+    content.text = GRStr(agent[@"name"]);
+    content.secondaryText = [lines componentsJoinedByString:@"\n"];
+    UIColor *dot = [state isEqualToString:@"available"] ? GRMint() :
+                   ([state isEqualToString:@"unavailable"] ? GRCoral() : GRAmber());
+    content.image = [GRSymbol(@"circle.fill", 11, UIFontWeightBold) imageWithTintColor:dot
+                                                                         renderingMode:UIImageRenderingModeAlwaysOriginal];
+    cell.accessoryType = GRArr(agent[@"methods"]).count ? UITableViewCellAccessoryDisclosureIndicator :
+                                                         UITableViewCellAccessoryNone;
+  }
+  else if ((NSUInteger)indexPath.row < [self connectors].count) {
+    NSDictionary *connector = [self connectors][(NSUInteger)indexPath.row];
+    BOOL shared = GRBool(connector[@"shared"]);
+    content.text = shared ? @"GhostBlender Simple (shared URL)" : GRStr(connector[@"name"]);
+    NSMutableArray *lines = [NSMutableArray array];
+    if (GRStr(connector[@"client"]).length) {
+      [lines addObject:[@"Client: " stringByAppendingString:GRStr(connector[@"client"])]];
+    }
+    double seen = GRNum(connector[@"last_seen"]);
+    [lines addObject:seen > 0 ? [NSString stringWithFormat:@"Last active %@", GRClock(seen)] : @"Not used yet"];
+    if (GRStr(connector[@"url"]).length) {
+      [lines addObject:[@"Tap to copy: " stringByAppendingString:GRStr(connector[@"url"])]];
+    }
+    else if (shared) {
+      [lines addObject:@"Configured on the relay; cannot be revoked here"];
+    }
+    content.secondaryText = [lines componentsJoinedByString:@"\n"];
+    content.image = GRSymbol(@"link", 15, UIFontWeightMedium);
+  }
+  else {
+    content.text = @"Connect an external agent…";
+    content.textProperties.color = GRMint();
+    content.image = GRSymbol(@"plus.circle.fill", 17, UIFontWeightSemibold);
+  }
+  cell.contentConfiguration = content;
+  return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+  [tableView deselectRowAtIndexPath:indexPath animated:YES];
+  UIView *source = [tableView cellForRowAtIndexPath:indexPath] ?: tableView;
+  if (indexPath.section == 0) {
+    [self agentActions:[self agents][(NSUInteger)indexPath.row] source:source];
+  }
+  else if ((NSUInteger)indexPath.row < [self connectors].count) {
+    [self connectorActions:[self connectors][(NSUInteger)indexPath.row] source:source];
+  }
+  else {
+    [self createConnector];
+  }
+}
+
+- (void)agentActions:(NSDictionary *)agent source:(UIView *)source
+{
+  NSString *identifier = GRStr(agent[@"id"]);
+  NSString *code = GRStr(agent[@"code"]);
+  NSURL *url = GRStr(agent[@"url"]).length ? [NSURL URLWithString:GRStr(agent[@"url"])] : nil;
+  if (code.length && url) {
+    [UIPasteboard generalPasteboard].string = code;
+    [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    return;
+  }
+  NSArray *methods = GRArr(agent[@"methods"]);
+  if (!methods.count) {
+    return;
+  }
+  UIAlertController *sheet = [UIAlertController alertControllerWithTitle:GRStr(agent[@"name"])
+                                                                 message:GRStr(agent[@"message"])
+                                                          preferredStyle:UIAlertControllerStyleActionSheet];
+  if ([methods containsObject:@"sign_in"]) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Sign in"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) {
+                                              GRSend(@{@"type" : @"agent_setup", @"agent_id" : identifier,
+                                                       @"op" : @"sign_in"});
+                                            }]];
+  }
+  if ([methods containsObject:@"api_key"]) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Set API key…"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) {
+                                              [self askForKey:identifier name:GRStr(agent[@"name"])];
+                                            }]];
+  }
+  if ([methods containsObject:@"sign_out"]) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Sign out"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *a) {
+                                              GRSend(@{@"type" : @"agent_setup", @"agent_id" : identifier,
+                                                       @"op" : @"sign_out"});
+                                            }]];
+  }
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+  sheet.popoverPresentationController.sourceView = source;
+  sheet.popoverPresentationController.sourceRect = source.bounds;
+  [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)askForKey:(NSString *)identifier name:(NSString *)name
+{
+  UIAlertController *alert = [UIAlertController
+      alertControllerWithTitle:[NSString stringWithFormat:@"%@ API key", name]
+                       message:@"Stored only on your relay. It is never shown again."
+                preferredStyle:UIAlertControllerStyleAlert];
+  [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+    field.secureTextEntry = YES;
+    field.placeholder = @"API key";
+    field.autocorrectionType = UITextAutocorrectionTypeNo;
+    field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  }];
+  __weak UIAlertController *weakAlert = alert;
+  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+  [alert addAction:[UIAlertAction actionWithTitle:@"Save"
+                                            style:UIAlertActionStyleDefault
+                                          handler:^(UIAlertAction *a) {
+                                            NSString *key = [weakAlert.textFields.firstObject.text
+                                                stringByTrimmingCharactersInSet:
+                                                    [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                                            if (key.length) {
+                                              GRSend(@{@"type" : @"agent_setup", @"agent_id" : identifier,
+                                                       @"op" : @"api_key", @"secret" : key});
+                                            }
+                                          }]];
+  [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)createConnector
+{
+  UIAlertController *alert = [UIAlertController
+      alertControllerWithTitle:@"Connect an external agent"
+                       message:@"Name it after the client that will use it, e.g. \"ChatGPT\" or \"Claude desktop\"."
+                preferredStyle:UIAlertControllerStyleAlert];
+  [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+    field.placeholder = @"Name";
+    field.autocapitalizationType = UITextAutocapitalizationTypeWords;
+  }];
+  __weak UIAlertController *weakAlert = alert;
+  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+  [alert addAction:[UIAlertAction actionWithTitle:@"Create"
+                                            style:UIAlertActionStyleDefault
+                                          handler:^(UIAlertAction *a) {
+                                            NSString *name = [weakAlert.textFields.firstObject.text
+                                                stringByTrimmingCharactersInSet:
+                                                    [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                                            if (name.length) {
+                                              GRSend(@{@"type" : @"connector_create", @"name" : name});
+                                            }
+                                          }]];
+  [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)connectorActions:(NSDictionary *)connector source:(UIView *)source
+{
+  NSString *url = GRStr(connector[@"url"]);
+  NSString *participant = GRStr(connector[@"participant_id"]);
+  UIAlertController *sheet = [UIAlertController alertControllerWithTitle:GRStr(connector[@"name"])
+                                                                 message:nil
+                                                          preferredStyle:UIAlertControllerStyleActionSheet];
+  if (url.length) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Copy connector URL"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) {
+                                              [UIPasteboard generalPasteboard].string = url;
+                                            }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Share…"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) {
+                                              UIActivityViewController *share = [[UIActivityViewController alloc]
+                                                  initWithActivityItems:@[ url ]
+                                                  applicationActivities:nil];
+                                              share.popoverPresentationController.sourceView = source;
+                                              [self presentViewController:share animated:YES completion:nil];
+                                            }]];
+  }
+  if (!GRBool(connector[@"shared"])) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Revoke access"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *a) {
+                                              GRSend(@{@"type" : @"connector_revoke",
+                                                       @"participant_id" : participant});
+                                            }]];
+  }
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+  sheet.popoverPresentationController.sourceView = source;
+  sheet.popoverPresentationController.sourceRect = source.bounds;
+  [self presentViewController:sheet animated:YES completion:nil];
+}
+
 @end
 
 /* ------------------------------------------------------------------------ cells */
@@ -563,7 +906,9 @@ static UIImage *GRImageAt(NSString *path)
 typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
 
 @interface GRController ()
-@property(nonatomic, weak) UIWindow *window;
+@property(nonatomic, strong) UIWindow *window;
+@property(nonatomic, weak) UIWindow *hostWindow;
+@property(nonatomic, strong) UIViewController *agentsSheet;
 @property(nonatomic, strong) NSDictionary *snapshot;
 @property(nonatomic, strong) NSArray<NSDictionary *> *items;
 @property(nonatomic, strong) NSMutableSet<NSString *> *expanded;
@@ -655,6 +1000,9 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
       continue;
     }
     for (UIWindow *candidate in ((UIWindowScene *)scene).windows) {
+      if ([candidate isKindOfClass:[GROverlayWindow class]]) {
+        continue;
+      }
       if (candidate.isKeyWindow && candidate.rootViewController) {
         return candidate;
       }
@@ -668,17 +1016,23 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
 
 - (BOOL)install
 {
-  UIWindow *window = [self blenderWindow];
-  if (!window) {
+  UIWindow *host = [self blenderWindow];
+  if (!host || !host.windowScene) {
     return NO;
   }
-  if (self.window == window && self.pill.superview == window) {
+  if (self.hostWindow == host && self.window.windowScene == host.windowScene && self.pill.superview) {
     return YES;
   }
   [self.pill removeFromSuperview];
   [self.panel removeFromSuperview];
   [self.resizeHandle removeFromSuperview];
-  self.window = window;
+  self.hostWindow = host;
+  GROverlayWindow *overlay = [[GROverlayWindow alloc] initWithWindowScene:host.windowScene];
+  overlay.rootViewController = [[GROverlayRoot alloc] init];
+  overlay.windowLevel = host.windowLevel + 1;
+  overlay.backgroundColor = [UIColor clearColor];
+  overlay.hidden = NO;
+  self.window = overlay;
   [self buildPill];
   [self buildPanel];
   [self installTouchObserver];
@@ -718,7 +1072,7 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
   observer.delaysTouchesBegan = NO;
   observer.delaysTouchesEnded = NO;
   observer.delegate = self;
-  [self.window addGestureRecognizer:observer];
+  [self.hostWindow addGestureRecognizer:observer];
 }
 
 - (void)noop
@@ -728,12 +1082,9 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
        shouldReceiveTouch:(UITouch *)touch
 {
+  /* Only Blender's window carries this observer: any touch here is outside GHOSTroom. */
   if (self.composer.isFirstResponder) {
-    UIView *hit = touch.view;
-    BOOL inside = [hit isDescendantOfView:self.panel] || [hit isDescendantOfView:self.pill];
-    if (!inside) {
-      [self.composer resignFirstResponder];
-    }
+    [self endComposing];
   }
   return NO;
 }
@@ -1171,18 +1522,34 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
   }
 }
 
-/* Give hardware keyboard shortcuts back to Blender when text entry ends. */
+/* Typing needs GHOSTroom's window to be key; hardware shortcuts go back to Blender after. */
+- (BOOL)textViewShouldBeginEditing:(UITextView *)textView
+{
+  if (!self.window.isKeyWindow) {
+    [self.window makeKeyWindow];
+  }
+  return YES;
+}
+
+- (void)returnKeyboardToBlender
+{
+  if (self.hostWindow && !self.hostWindow.isKeyWindow) {
+    [self.hostWindow makeKeyWindow];
+  }
+  [self.hostWindow.rootViewController becomeFirstResponder];
+}
+
 - (void)endComposing
 {
   if (self.composer.isFirstResponder) {
     [self.composer resignFirstResponder];
   }
-  [self.window.rootViewController becomeFirstResponder];
+  [self returnKeyboardToBlender];
 }
 
 - (void)textViewDidEndEditing:(UITextView *)textView
 {
-  [self.window.rootViewController becomeFirstResponder];
+  [self returnKeyboardToBlender];
 }
 
 /* ---- snapshot ---- */
@@ -1336,6 +1703,13 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
     action.state = [identifier isEqualToString:selectedId] ? UIMenuElementStateOn : UIMenuElementStateOff;
     [actions addObject:action];
   }
+  __weak GRController *weakSelf = self;
+  UIAction *manage = [UIAction actionWithTitle:@"Agents & connections…"
+                                         image:GRSymbol(@"person.2.badge.gearshape", 15, UIFontWeightMedium)
+                                    identifier:nil
+                                       handler:^(UIAction *a) {
+                                         [weakSelf showAgents];
+                                       }];
   if (actions.count == 0) {
     UIAction *none = [UIAction actionWithTitle:@"No agents configured on the relay"
                                          image:nil
@@ -1345,7 +1719,13 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
     none.attributes = UIMenuElementAttributesDisabled;
     [actions addObject:none];
   }
-  self.agentButton.menu = [UIMenu menuWithTitle:@"Talk to" children:actions];
+  UIMenu *agentsMenu = [UIMenu menuWithTitle:@"" image:nil identifier:nil
+                                     options:UIMenuOptionsDisplayInline children:actions];
+  UIMenu *manageMenu = [UIMenu menuWithTitle:@"" image:nil identifier:nil
+                                     options:UIMenuOptionsDisplayInline children:@[ manage ]];
+  self.agentButton.menu = [UIMenu menuWithTitle:@"Talk to" children:@[ agentsMenu, manageMenu ]];
+  [(GRAgentsSheet *)((UINavigationController *)self.agentsSheet).viewControllers.firstObject
+      refresh:GRDict(self.snapshot[@"setup"])];
   NSString *agentState = GRStr(agent[@"state"]);
   [self setButton:self.agentButton title:agent ? GRStr(agent[@"name"]) : @"Agent"];
   UIButtonConfiguration *config = self.agentButton.configuration;
@@ -1591,6 +1971,17 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
                                     options:UIMenuOptionsDisplayInline
                                    children:@[ photo, file ]];
   return [UIMenu menuWithTitle:@"Attach context" children:@[ blenderMenu, otherMenu ]];
+}
+
+- (void)showAgents
+{
+  GRAgentsSheet *sheet = [[GRAgentsSheet alloc] init];
+  [sheet refresh:GRDict(self.snapshot[@"setup"])];
+  UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:sheet];
+  navigation.modalPresentationStyle = UIModalPresentationFormSheet;
+  navigation.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+  self.agentsSheet = navigation;
+  [[self presenter] presentViewController:navigation animated:YES completion:nil];
 }
 
 - (UIViewController *)presenter

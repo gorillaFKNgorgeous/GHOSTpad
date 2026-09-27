@@ -1,0 +1,20 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-ask-0002",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "lane": "codex",
+  "kind": "request_input",
+  "parent": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "status": "started",
+  "body": {
+    "prompt": "Select the GB_Mask object, then press Tab to enter Edit Mode.",
+    "input": "perform_step",
+    "lesson_step": "lesson-0001-step-2"
+  }
+}

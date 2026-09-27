@@ -1,0 +1,14 @@
+{
+  "why": "completed events must not carry a failure",
+  "base": "event/discuss_final_from_legacy.json",
+  "expect": "should not be valid",
+  "set": {
+    "/failure": {
+      "code": "tool_error",
+      "layer": "tool",
+      "message": "x",
+      "mutation_possible": false,
+      "retry": "safe"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "job_id": "fixture-exec-python-0001",
+  "state": "uncertain",
+  "operation": "execute_python",
+  "started_at": 1790343249.059228,
+  "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "error": "app_restarted_during_command"
+}

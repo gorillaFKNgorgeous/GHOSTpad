@@ -1,0 +1,8 @@
+{
+  "why": "an uncertain outcome must say what failed",
+  "base": "ledger/mutation_uncertain.json",
+  "expect": "'failure' is a required",
+  "remove": [
+    "/failure"
+  ]
+}

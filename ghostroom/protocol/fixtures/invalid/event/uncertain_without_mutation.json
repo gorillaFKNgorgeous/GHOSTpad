@@ -1,0 +1,10 @@
+{
+  "why": "uncertain implies mutation_possible true",
+  "base": "event/execute_uncertain.json",
+  "expect": "failure/mutation_possible: True was expected",
+  "set": {
+    "/failure/mutation_possible": false,
+    "/failure/code": "tool_error",
+    "/failure/retry": "after_inspect"
+  }
+}

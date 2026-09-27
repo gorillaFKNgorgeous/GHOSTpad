@@ -1,0 +1,29 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-review-0002",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "claude",
+    "provider": "claude",
+    "display_name": "Claude"
+  },
+  "lane": "claude",
+  "kind": "review",
+  "parent": "evt-review-0001",
+  "status": "completed",
+  "body": {
+    "subject": {
+      "type": "event",
+      "event_id": "evt-exec-0001"
+    },
+    "verdict": "concerns",
+    "role": "critic",
+    "reviewer": "claude",
+    "summary": "Loop seam is 9 degrees.",
+    "card": "card-0001"
+  },
+  "artifacts": [
+    "card-0001"
+  ]
+}

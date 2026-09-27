@@ -1,0 +1,8 @@
+{
+  "why": "handoffs must describe the state of work",
+  "base": "ledger/handoff.json",
+  "expect": "handoff: 'state_of_work' is a required",
+  "remove": [
+    "/handoff/state_of_work"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "why": "interrupted_after_possible_mutation implies mutation_possible",
+  "base": "failure/tool_timeout_python.json",
+  "expect": "mutation_possible: True was expected",
+  "set": {
+    "/code": "interrupted_after_possible_mutation",
+    "/mutation_possible": false
+  }
+}

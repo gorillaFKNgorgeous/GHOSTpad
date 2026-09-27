@@ -1,0 +1,8 @@
+{
+  "why": "scene leases name their scene",
+  "base": "lease/active_scene.json",
+  "expect": "scope: 'scene_id' is a required",
+  "remove": [
+    "/scope/scene_id"
+  ]
+}

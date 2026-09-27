@@ -1,0 +1,7 @@
+{
+  "code": "auth_expired",
+  "layer": "relay",
+  "message": "Device pairing rejected.",
+  "mutation_possible": false,
+  "retry": "after_user_action"
+}

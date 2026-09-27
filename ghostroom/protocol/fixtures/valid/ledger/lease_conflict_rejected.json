@@ -1,0 +1,37 @@
+{
+  "entry_id": "fixture-led-0102",
+  "seq": {
+    "stream_id": "ledger-main-0001",
+    "seq": 102
+  },
+  "timestamp": "2026-09-27T04:00:01.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "legacy-unattributed",
+    "display_name": "Unattributed (shared legacy capability)"
+  },
+  "lane": "legacy-unattributed",
+  "category": "lease",
+  "summary": "legacy-unattributed: execute_python rejected (lease_conflict)",
+  "lease_id": "fixture-lease-0001",
+  "failure": {
+    "code": "lease_conflict",
+    "layer": "relay",
+    "message": "claude holds the scene edit lease fixture-lease-0001",
+    "mutation_possible": false,
+    "retry": "safe"
+  },
+  "lease": {
+    "lease_id": "fixture-lease-0001",
+    "event": "rejected",
+    "implicit": false,
+    "scope_kind": "scene",
+    "holder": "claude",
+    "acquired_at": "2026-09-27T03:59:00.000Z",
+    "expires_at": "2026-09-27T04:01:00.000Z",
+    "scene_id": "cccccccccccccccccccccccccccccccc",
+    "requested_by": "legacy-unattributed",
+    "request_id": "fixture-req-0002",
+    "operation": "execute_python"
+  }
+}

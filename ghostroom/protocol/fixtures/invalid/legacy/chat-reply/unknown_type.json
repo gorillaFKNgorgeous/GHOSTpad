@@ -1,0 +1,8 @@
+{
+  "why": "event type is status|final|error (store.py:51)",
+  "base": "legacy/chat-reply/events.json",
+  "expect": "'progress' is not one of",
+  "set": {
+    "/events/0/type": "progress"
+  }
+}

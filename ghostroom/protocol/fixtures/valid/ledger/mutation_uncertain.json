@@ -1,0 +1,37 @@
+{
+  "entry_id": "fixture-led-0103",
+  "seq": {
+    "stream_id": "ledger-main-0001",
+    "seq": 103
+  },
+  "timestamp": "2026-09-27T04:02:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "legacy-unattributed",
+    "display_name": "Unattributed (shared legacy capability)"
+  },
+  "lane": "legacy-unattributed",
+  "category": "mutation",
+  "outcome": "uncertain",
+  "summary": "execute_python fixture-job-0003 outcome unknown: delivered, no result before expiry",
+  "evidence": [
+    {
+      "type": "job",
+      "job_id": "fixture-job-0003",
+      "operation": "execute_python",
+      "state": "uncertain",
+      "relay_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "request_id": "fixture-req-0003",
+      "scene_id": "cccccccccccccccccccccccccccccccc",
+      "boot_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "scene_id": "cccccccccccccccccccccccccccccccc",
+  "failure": {
+    "code": "interrupted_after_possible_mutation",
+    "layer": "relay",
+    "message": "Job was delivered but no result arrived before it expired; it may have run.",
+    "mutation_possible": true,
+    "retry": "after_inspect"
+  }
+}

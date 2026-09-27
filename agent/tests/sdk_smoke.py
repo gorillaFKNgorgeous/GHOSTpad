@@ -26,7 +26,7 @@ async def main():
                         initialized = await session.initialize()
                         assert initialized.serverInfo.name == 'GhostBlender'
                         tools = await session.list_tools()
-                        assert len(tools.tools) == 10
+                        assert len(tools.tools) == 13
                         result = await session.call_tool('status', {})
                         assert not result.isError
                         assert 'device_not_paired' in result.content[0].text

@@ -1,0 +1,8 @@
+{
+  "why": "quota state is required (use unknown)",
+  "base": "agent/codex_available.json",
+  "expect": "'quota' is a required",
+  "remove": [
+    "/quota"
+  ]
+}

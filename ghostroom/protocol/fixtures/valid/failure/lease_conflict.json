@@ -1,0 +1,7 @@
+{
+  "code": "lease_conflict",
+  "layer": "relay",
+  "message": "claude holds the scene edit lease",
+  "mutation_possible": false,
+  "retry": "safe"
+}

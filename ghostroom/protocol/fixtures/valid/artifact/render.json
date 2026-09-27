@@ -1,0 +1,26 @@
+{
+  "artifact_id": "render-0001",
+  "type": "render",
+  "created_at": "2026-09-25T13:35:16.746Z",
+  "origin": {
+    "kind": "ghostblender",
+    "id": "bridge"
+  },
+  "media": {
+    "media_type": "image/png",
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "width": 1536,
+    "height": 864
+  },
+  "engine": "BLENDER_EEVEE_NEXT",
+  "frame": 24,
+  "evidence": {
+    "type": "job",
+    "job_id": "fixture-capture-render-0001",
+    "operation": "capture",
+    "state": "completed",
+    "device_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "started_at": "2026-09-25T13:35:16.492Z",
+    "ended_at": "2026-09-25T13:35:16.746Z"
+  }
+}

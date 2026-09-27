@@ -1,0 +1,28 @@
+{
+  "artifact_id": "shot-0001",
+  "type": "screenshot",
+  "created_at": "2026-09-25T13:35:16.746Z",
+  "origin": {
+    "kind": "ghostblender",
+    "id": "bridge"
+  },
+  "media": {
+    "media_type": "image/png",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 812345,
+    "width": 1024,
+    "height": 768,
+    "uri": "media/shot-0001.png"
+  },
+  "capture_source": "app_window",
+  "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+  "evidence": {
+    "type": "job",
+    "job_id": "d1bc311c92954760a7ed0c79dcf3aa77",
+    "operation": "capture",
+    "state": "completed",
+    "device_digest": "82a9403ce593070f2eb2fb1d751f622256d8d024abf0afe5186ad9d1cf8901a3",
+    "started_at": "2026-09-25T13:35:16.492Z",
+    "ended_at": "2026-09-25T13:35:16.746Z"
+  }
+}

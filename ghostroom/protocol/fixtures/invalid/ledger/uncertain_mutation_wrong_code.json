@@ -1,0 +1,8 @@
+{
+  "why": "a mutating job with unknown outcome is always interrupted_after_possible_mutation",
+  "base": "ledger/mutation_uncertain.json",
+  "expect": "failure/code: 'interrupted_after_possible_mutation' was expected",
+  "set": {
+    "/failure/code": "tool_timeout"
+  }
+}

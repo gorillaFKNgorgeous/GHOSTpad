@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/event.schema.json",
+  "title": "GHOSTroom event envelope",
+  "description": "One thing that happened in a GHOSTroom. 'kind' separates discussion, inspection, planning, execution, waiting, review and requests for user input, so the UI can show what each participant is doing.",
+  "type": "object",
+  "required": ["protocol", "id", "timestamp", "origin", "lane", "kind", "parent", "status", "body"],
+  "additionalProperties": false,
+  "properties": {
+    "protocol": { "const": "ghostroom/0" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "timestamp": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "origin": { "$ref": "common.schema.json#/$defs/origin" },
+    "lane": { "$ref": "common.schema.json#/$defs/lane" },
+    "kind": {
+      "enum": ["discuss", "inspect", "plan", "execute", "wait", "review", "request_input"]
+    },
+    "parent": {
+      "description": "Causal parent event id: the event this one responds to or continues. null only for a root (e.g. a fresh user instruction).",
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/id" },
+        { "type": "null" }
+      ]
+    },
+    "correlation": {
+      "description": "Groups events that belong to one turn or task (e.g. the legacy chat message_id).",
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "stream": { "$ref": "common.schema.json#/$defs/stream_position" },
+    "status": {
+      "description": "Lifecycle of the activity this event reports. 'uncertain' means it may have happened; never replay it automatically.",
+      "enum": ["started", "progress", "completed", "failed", "cancelled", "uncertain"]
+    },
+    "body": { "type": "object" },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/id" }
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "common.schema.json#/$defs/evidence_ref" }
+    },
+    "failure": { "$ref": "failure.schema.json" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "enum": ["failed", "uncertain"] } } },
+      "then": { "required": ["failure"] },
+      "else": { "not": { "required": ["failure"] } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "uncertain" } } },
+      "then": { "properties": { "failure": { "properties": { "mutation_possible": { "const": true } } } } }
+    },
+    { "if": { "properties": { "kind": { "const": "discuss" } } }, "then": { "properties": { "body": { "$ref": "#/$defs/discuss" } } } },
+    { "if": { "properties": { "kind": { "const": "inspect" } } }, "then": { "properties": { "body": { "$ref": "#/$defs/inspect" } } } },
+    { "if": { "properties": { "kind": { "const": "plan" } } }, "then": { "properties": { "body": { "$ref": "#/$defs/plan" } } } },
+    { "if": { "properties": { "kind": { "const": "execute" } } }, "then": { "properties": { "body": { "$ref": "#/$defs/execute" } } } },
+    { "if": { "properties": { "kind": { "const": "wait" } } }, "then": { "properties": { "body": { "$ref": "#/$defs/wait" } } } },
+    { "if": { "properties": { "kind": { "const": "review" } } }, "then": { "properties": { "body": { "$ref": "#/$defs/review" } } } },
+    { "if": { "properties": { "kind": { "const": "request_input" } } }, "then": { "properties": { "body": { "$ref": "#/$defs/request_input" } } } },
+    {
+      "$comment": "Anything that may change Blender must name the edit lease it ran under.",
+      "if": {
+        "properties": {
+          "kind": { "const": "execute" },
+          "body": { "properties": { "mutation": { "enum": ["possible", "confirmed"] } }, "required": ["mutation"] }
+        },
+        "required": ["kind", "body"]
+      },
+      "then": { "properties": { "body": { "required": ["lease_id"] } } }
+    }
+  ],
+  "$defs": {
+    "discuss": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "text"],
+      "properties": {
+        "role": { "enum": ["user", "assistant", "system"] },
+        "text": { "$ref": "common.schema.json#/$defs/text" },
+        "format": { "enum": ["plain", "markdown"], "default": "plain" },
+        "audience": {
+          "description": "Optional addressee(s): agent ids, or 'user'. Absent means the whole room.",
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/id_or_name" }
+        }
+      }
+    },
+    "inspect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target"],
+      "properties": {
+        "target": { "enum": ["scene", "selection", "object", "topology", "transforms", "modifiers", "animation", "materials", "viewport", "render", "logs", "scripts", "files"] },
+        "summary": { "$ref": "common.schema.json#/$defs/text" },
+        "subject": { "$ref": "common.schema.json#/$defs/id" },
+        "progress_label": { "$ref": "common.schema.json#/$defs/short_text" }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary"],
+      "properties": {
+        "summary": { "$ref": "common.schema.json#/$defs/text" },
+        "steps": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "common.schema.json#/$defs/text" }
+        },
+        "mutates": {
+          "description": "Whether carrying out the plan will change Blender (and so needs a lease).",
+          "type": "boolean"
+        },
+        "task": { "$ref": "common.schema.json#/$defs/id" }
+      }
+    },
+    "execute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "mutation"],
+      "properties": {
+        "summary": { "$ref": "common.schema.json#/$defs/text" },
+        "mutation": {
+          "description": "none: read-only tool. possible: may have changed Blender (running, failed partway). confirmed: change verified by inspection.",
+          "enum": ["none", "possible", "confirmed"]
+        },
+        "lease_id": { "$ref": "common.schema.json#/$defs/id" },
+        "progress_label": { "$ref": "common.schema.json#/$defs/short_text" }
+      }
+    },
+    "wait": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["on"],
+      "properties": {
+        "on": { "enum": ["blender", "agent", "review", "user", "relay", "provider", "lease"] },
+        "label": {
+          "description": "Specific progress text, e.g. 'Capturing viewport', never a generic spinner.",
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
+        "fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "until": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "verdict"],
+      "properties": {
+        "subject": { "$ref": "common.schema.json#/$defs/evidence_ref" },
+        "verdict": { "enum": ["requested", "pending", "approved", "concerns", "rejected"] },
+        "role": { "$ref": "common.schema.json#/$defs/collab_role" },
+        "reviewer": { "$ref": "common.schema.json#/$defs/id_or_name" },
+        "summary": { "$ref": "common.schema.json#/$defs/text" },
+        "card": {
+          "description": "artifact_id of the review_card with the findings.",
+          "$ref": "common.schema.json#/$defs/id"
+        }
+      }
+    },
+    "request_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt", "input"],
+      "properties": {
+        "prompt": { "$ref": "common.schema.json#/$defs/text" },
+        "input": { "enum": ["text", "choice", "confirm", "perform_step", "attach_context"] },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label"],
+            "properties": {
+              "id": { "$ref": "common.schema.json#/$defs/id_or_name" },
+              "label": { "$ref": "common.schema.json#/$defs/short_text" }
+            }
+          }
+        },
+        "context": {
+          "description": "For attach_context: what the agent asks the user to attach.",
+          "type": "array",
+          "items": { "enum": ["current_scene", "selected_object", "viewport", "screenshot", "render_result", "image", "file"] }
+        },
+        "lesson_step": { "$ref": "common.schema.json#/$defs/id" }
+      },
+      "allOf": [
+        { "if": { "properties": { "input": { "const": "choice" } } }, "then": { "required": ["choices"] } },
+        { "if": { "properties": { "input": { "const": "perform_step" } } }, "then": { "required": ["lesson_step"] } },
+        { "if": { "properties": { "input": { "const": "attach_context" } } }, "then": { "required": ["context"] } }
+      ]
+    }
+  }
+}

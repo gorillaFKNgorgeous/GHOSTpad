@@ -1,0 +1,8 @@
+{
+  "why": "a stream position needs stream_id so cursor restarts are detectable",
+  "base": "event/discuss_final_from_legacy.json",
+  "expect": "stream: 'stream_id' is a required",
+  "remove": [
+    "/stream/stream_id"
+  ]
+}

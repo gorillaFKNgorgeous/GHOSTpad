@@ -1,0 +1,8 @@
+{
+  "why": "ledger entries cannot copy payloads such as script code",
+  "base": "ledger/inspection_from_journal.json",
+  "expect": "('code' was unexpected)",
+  "set": {
+    "/code": "import bpy\n"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-error-0043",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "relay",
+    "id": "relay"
+  },
+  "lane": "relay",
+  "kind": "discuss",
+  "parent": "3f1c9a0d6b2e4f7a8c5d1e0b9a8f7c6d",
+  "status": "failed",
+  "body": {
+    "role": "system",
+    "text": "AI sign-in required on the relay before embedded chat can run."
+  },
+  "stream": {
+    "stream_id": "relaydb-7Qm2xK9p",
+    "seq": 43
+  },
+  "failure": {
+    "code": "auth_expired",
+    "layer": "agent_provider",
+    "message": "Codex account is not signed in.",
+    "mutation_possible": false,
+    "retry": "after_user_action",
+    "agent_id": "codex"
+  }
+}

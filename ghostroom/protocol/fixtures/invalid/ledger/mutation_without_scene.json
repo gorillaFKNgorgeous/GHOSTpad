@@ -1,0 +1,8 @@
+{
+  "why": "mutations must record scene_id",
+  "base": "ledger/mutation.json",
+  "expect": "'scene_id' is a required",
+  "remove": [
+    "/scene_id"
+  ]
+}

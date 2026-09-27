@@ -1,0 +1,8 @@
+{
+  "code": "provider_unavailable",
+  "layer": "agent_provider",
+  "message": "Provider returned 503.",
+  "mutation_possible": false,
+  "retry": "switch_agent",
+  "agent_id": "gemini"
+}

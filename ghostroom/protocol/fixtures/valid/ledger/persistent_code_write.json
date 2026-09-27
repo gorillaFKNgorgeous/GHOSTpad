@@ -1,0 +1,45 @@
+{
+  "entry_id": "fixture-led-0101",
+  "seq": {
+    "stream_id": "ledger-main-0001",
+    "seq": 101
+  },
+  "timestamp": "2026-09-27T04:00:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "claude",
+    "provider": "claude",
+    "display_name": "Claude"
+  },
+  "lane": "claude",
+  "category": "persistent_code",
+  "outcome": "completed",
+  "summary": "write_script fixture-job-0001 completed on the device",
+  "evidence": [
+    {
+      "type": "job",
+      "job_id": "fixture-job-0001",
+      "operation": "write_script",
+      "state": "completed",
+      "relay_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "request_id": "fixture-req-0001",
+      "scene_id": "cccccccccccccccccccccccccccccccc",
+      "boot_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "result_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+  ],
+  "scene_id": "cccccccccccccccccccccccccccccccc",
+  "lease_id": "implicit-fixture-job-0001",
+  "persistent_code": {
+    "risk": true,
+    "script": "tool.py",
+    "replaces_existing": true,
+    "previous_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "resulting_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "confirmed_by_device": true,
+    "loaded_by_bridge_at_startup": false,
+    "device_auto_load": "unknown",
+    "request_id": "fixture-req-0001",
+    "job_id": "fixture-job-0001"
+  }
+}

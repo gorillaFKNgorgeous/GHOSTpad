@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/agent.schema.json",
+  "title": "GHOSTroom agent descriptor",
+  "description": "What GHOSTpad knows about one configured agent, published by the Agent Router. Describes an adapter; no provider is structurally essential.",
+  "type": "object",
+  "required": ["agent_id", "display_name", "provider", "availability", "auth", "capabilities", "quota", "updated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": { "$ref": "common.schema.json#/$defs/id_or_name" },
+    "display_name": { "$ref": "common.schema.json#/$defs/short_text" },
+    "provider": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+      "description": "Adapter name, e.g. codex, claude, gemini, openai."
+    },
+    "model": {
+      "description": "Model identity if the provider reports one. Informational only.",
+      "type": "string",
+      "maxLength": 128
+    },
+    "lane": { "$ref": "common.schema.json#/$defs/lane" },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["available", "busy", "unavailable", "unknown"] },
+        "reason": { "$ref": "failure.schema.json" },
+        "checked_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "unavailable" } } },
+          "then": { "required": ["reason"] }
+        }
+      ]
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["signed_in", "signed_out", "expired", "not_required", "unknown"] },
+        "method": {
+          "description": "How the adapter authenticates. Never contains the credential itself.",
+          "enum": ["device_code", "oauth", "api_key", "capability_url", "none", "other"]
+        },
+        "checked_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "expires_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["discuss", "inspect", "plan", "execute", "capture", "vision", "review", "teach", "long_running"]
+      }
+    },
+    "roles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/collab_role" }
+    },
+    "quota": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["ok", "low", "exhausted", "unknown"] },
+        "resets_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "detail": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "active_task": {
+      "description": "artifact_id of the task artifact this agent is working on, if any.",
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "activity": {
+      "description": "One-line visible activity, e.g. 'reviewing cloth topology'.",
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "updated_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+  }
+}

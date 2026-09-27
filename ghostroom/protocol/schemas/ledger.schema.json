@@ -1,0 +1,595 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ghostpad.invalid/ghostroom/v0/ledger.schema.json",
+  "title": "GHOSTroom shared workspace ledger entry",
+  "description": "Agent-neutral, append-only record of meaningful project activity. Entries summarise and point at evidence (job digests, artifacts, events). They never copy tool payloads such as code, stdout, scene dumps or images.",
+  "type": "object",
+  "required": [
+    "entry_id",
+    "seq",
+    "timestamp",
+    "origin",
+    "category",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "entry_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "seq": {
+      "description": "Monotonic position in this ledger (stream).",
+      "$ref": "common.schema.json#/$defs/stream_position"
+    },
+    "timestamp": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "origin": {
+      "$ref": "common.schema.json#/$defs/origin"
+    },
+    "lane": {
+      "$ref": "common.schema.json#/$defs/lane"
+    },
+    "category": {
+      "enum": [
+        "instruction",
+        "response",
+        "task",
+        "tool_call",
+        "mutation",
+        "inspection",
+        "evidence",
+        "file",
+        "checkpoint",
+        "failure",
+        "warning",
+        "decision",
+        "review",
+        "handoff",
+        "question",
+        "summary",
+        "lease",
+        "persistent_code"
+      ]
+    },
+    "summary": {
+      "description": "Short, self-contained statement another agent can read without the originating lane.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "rationale": {
+      "description": "Why: needed for decisions, abandonments and handoffs.",
+      "type": "string",
+      "maxLength": 4000
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/id"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "common.schema.json#/$defs/evidence_ref"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/id"
+      }
+    },
+    "scene_id": {
+      "$ref": "common.schema.json#/$defs/blender_id"
+    },
+    "lease_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "failure": {
+      "$ref": "failure.schema.json"
+    },
+    "supersedes": {
+      "description": "entry_id this entry corrects or replaces. The ledger is append-only; nothing is edited in place.",
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "state_of_work"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "common.schema.json#/$defs/id_or_name"
+        },
+        "to": {
+          "$ref": "common.schema.json#/$defs/id_or_name"
+        },
+        "state_of_work": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "open_questions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "next_steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        }
+      }
+    },
+    "outcome": {
+      "description": "What is known about the job or request this entry records. completed means the device reported success for this exact job_id and boot_id; it is never inferred from dispatch, issuance, timeout, connection loss or the absence of an error. uncertain means it may have run and the result is unknown.",
+      "enum": [
+        "requested",
+        "dispatched",
+        "completed",
+        "failed",
+        "expired",
+        "cancelled",
+        "uncertain"
+      ]
+    },
+    "persistent_code": {
+      "description": "Present on every write_script entry: the write persists code beyond the session and participant.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "risk",
+        "script",
+        "replaces_existing",
+        "previous_sha256",
+        "resulting_sha256",
+        "confirmed_by_device",
+        "loaded_by_bridge_at_startup",
+        "device_auto_load",
+        "request_id",
+        "job_id"
+      ],
+      "properties": {
+        "risk": {
+          "const": true
+        },
+        "script": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}\\.py$"
+        },
+        "replaces_existing": {
+          "type": "boolean"
+        },
+        "previous_sha256": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resulting_sha256": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confirmed_by_device": {
+          "description": "True once the device reported the resulting digest.",
+          "type": "boolean"
+        },
+        "loaded_by_bridge_at_startup": {
+          "description": "Known from source: the bridge never imports the workspace.",
+          "const": false
+        },
+        "device_auto_load": {
+          "description": "Whether anything on the device auto-loads the workspace (docs/ghostroom/SCRIPT-WORKSPACE.md).",
+          "enum": [
+            "unknown",
+            "none",
+            "known"
+          ]
+        },
+        "request_id": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "job_id": {
+          "$ref": "common.schema.json#/$defs/id"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "replaces_existing": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "previous_sha256": {
+                "$ref": "common.schema.json#/$defs/sha256"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "previous_sha256": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lease": {
+      "description": "A lease event: acquisition, renewal, end, or a request rejected because of a lease.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lease_id",
+        "event"
+      ],
+      "properties": {
+        "lease_id": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "event": {
+          "enum": [
+            "acquired",
+            "renewed",
+            "released",
+            "expired",
+            "revoked",
+            "rejected"
+          ]
+        },
+        "implicit": {
+          "type": "boolean"
+        },
+        "scope_kind": {
+          "enum": [
+            "scene",
+            "objects",
+            "collection",
+            "file",
+            "script_workspace"
+          ]
+        },
+        "holder": {
+          "$ref": "common.schema.json#/$defs/id_or_name"
+        },
+        "acquired_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "scene_id": {
+          "$ref": "common.schema.json#/$defs/blender_id"
+        },
+        "job_id": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "requested_by": {
+          "$ref": "common.schema.json#/$defs/id_or_name"
+        },
+        "request_id": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "operation": {
+          "type": "string",
+          "maxLength": 64
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event": {
+                "not": {
+                  "const": "rejected"
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "implicit",
+              "scope_kind",
+              "holder",
+              "acquired_at",
+              "expires_at"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event": {
+                "const": "rejected"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "requested_by"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "Tool calls and mutations must reference the GhostBlender job(s) they are about.",
+      "if": {
+        "properties": {
+          "category": {
+            "enum": [
+              "tool_call",
+              "mutation",
+              "inspection",
+              "persistent_code"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "evidence"
+        ],
+        "properties": {
+          "evidence": {
+            "contains": {
+              "$ref": "common.schema.json#/$defs/job_evidence"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "mutation"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "scene_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "failure"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "failure"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "decision"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "rationale"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "handoff"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "handoff"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "checkpoint"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "artifacts"
+        ],
+        "properties": {
+          "artifacts": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "persistent_code"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "persistent_code"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "persistent_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "persistent_code"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "lease"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "lease"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "lease": {
+            "properties": {
+              "event": {
+                "const": "rejected"
+              }
+            },
+            "required": [
+              "event"
+            ]
+          }
+        },
+        "required": [
+          "lease"
+        ]
+      },
+      "then": {
+        "required": [
+          "failure"
+        ]
+      }
+    },
+    {
+      "$comment": "Negative outcomes always say what failed and whether anything may have changed.",
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "failed",
+              "expired",
+              "uncertain"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "failure"
+        ]
+      }
+    },
+    {
+      "$comment": "Success and in-progress outcomes never carry a failure.",
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "requested",
+              "dispatched",
+              "completed",
+              "cancelled"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "failure"
+          ]
+        }
+      }
+    },
+    {
+      "$comment": "A mutating job whose result is unknown is always recorded as interrupted_after_possible_mutation.",
+      "if": {
+        "properties": {
+          "category": {
+            "enum": [
+              "mutation",
+              "persistent_code"
+            ]
+          },
+          "outcome": {
+            "const": "uncertain"
+          }
+        },
+        "required": [
+          "category",
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "failure": {
+            "properties": {
+              "code": {
+                "const": "interrupted_after_possible_mutation"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

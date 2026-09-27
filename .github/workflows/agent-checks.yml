@@ -4,6 +4,13 @@ on:
     branches: [main]
     paths:
       - agent/**
+      - ghostroom/**
+      - scripts/apply-ios-agent-bridge.py
+      - .github/workflows/agent-checks.yml
+  pull_request:
+    paths:
+      - agent/**
+      - ghostroom/**
       - scripts/apply-ios-agent-bridge.py
       - .github/workflows/agent-checks.yml
   workflow_dispatch:
@@ -20,9 +27,13 @@ jobs:
       - run: >-
           python -m py_compile
           agent/relay/server.py agent/relay/simple_server.py agent/relay/store.py
-          agent/relay/chat.py agent/relay/chat_login.py
+          agent/relay/chat.py agent/relay/chat_login.py agent/relay/participants.py
           agent/runtime/__init__.py agent/runtime/core.py agent/runtime/insight.py
       - run: python -m unittest discover -s agent/tests -v
+      - name: Validate GHOSTroom protocol schemas and fixtures
+        run: |
+          python -m pip install 'jsonschema==4.25.1' 'pytest==8.4.2'
+          python -m pytest ghostroom/tests -q
       - run: python -m pip install 'mcp==1.26.0'
       - run: python agent/tests/sdk_smoke.py
   native-syntax:

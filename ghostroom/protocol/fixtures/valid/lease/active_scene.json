@@ -1,0 +1,18 @@
+{
+  "lease_id": "lease-0001-scene",
+  "holder": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "acquired_at": "2026-09-27T02:24:00.194Z",
+  "expires_at": "2026-09-27T02:29:00.194Z",
+  "scope": {
+    "kind": "scene",
+    "scene_id": "e6072cdd2e354163a5b3922058174f7f",
+    "boot_id": "2f034d002d1f42c989ffd2ad95171a60"
+  },
+  "state": "active",
+  "task": "task-0001"
+}

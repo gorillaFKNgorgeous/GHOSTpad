@@ -1,0 +1,8 @@
+{
+  "why": "a rejected request carries its typed failure",
+  "base": "ledger/lease_conflict_rejected.json",
+  "expect": "'failure' is a required",
+  "remove": [
+    "/failure"
+  ]
+}

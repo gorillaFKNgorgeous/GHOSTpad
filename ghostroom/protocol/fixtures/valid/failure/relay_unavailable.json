@@ -1,0 +1,7 @@
+{
+  "code": "relay_unavailable",
+  "layer": "relay",
+  "message": "Relay not reachable.",
+  "mutation_possible": false,
+  "retry": "safe"
+}

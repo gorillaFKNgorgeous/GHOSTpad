@@ -1,0 +1,13 @@
+{
+  "why": "evidence references jobs; it cannot embed result payloads",
+  "base": "event/inspect_scene.json",
+  "expect": "('result' was unexpected)",
+  "set": {
+    "/evidence/0/result": {
+      "ok": true,
+      "value": {
+        "code": "..."
+      }
+    }
+  }
+}

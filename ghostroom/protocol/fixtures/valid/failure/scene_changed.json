@@ -1,0 +1,8 @@
+{
+  "code": "scene_changed",
+  "layer": "relay",
+  "message": "Scene changed; inspect again.",
+  "mutation_possible": false,
+  "retry": "after_inspect",
+  "legacy_error": "scene_changed; call status and inspect_scene again"
+}

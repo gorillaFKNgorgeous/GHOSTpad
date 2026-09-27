@@ -1,0 +1,19 @@
+{
+  "protocol": "ghostroom/0",
+  "id": "evt-exec-0002",
+  "timestamp": "2026-09-27T02:30:00.000Z",
+  "origin": {
+    "kind": "agent",
+    "id": "codex",
+    "provider": "codex",
+    "display_name": "Codex"
+  },
+  "lane": "codex",
+  "kind": "execute",
+  "parent": "evt-plan-0001",
+  "status": "completed",
+  "body": {
+    "summary": "Listed saved scripts",
+    "mutation": "none"
+  }
+}

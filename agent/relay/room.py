@@ -316,6 +316,8 @@ def workspace_brief(store, device_id, since_seq=0, exclude_participant=None, max
                 last_phase = compact['label']
         elif category == 'failure':
             lines.append(f'{when} {who} [failure]: {entry["summary"][:200]}')
+        elif category == 'file':
+            lines.append(f'{when} [file]: {entry["summary"][:200]}')
     if not lines and not notes:
         return ''
     parts = []

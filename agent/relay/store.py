@@ -28,6 +28,7 @@ WORKSPACE_MUTATING = {'write_script'}
 KEY = re.compile(r'^[a-zA-Z0-9_-]{8,80}$')
 CHAT_KEY = re.compile(r'^[a-f0-9]{32}$')
 SHA256 = re.compile(r'^[a-f0-9]{64}$')
+SHA256_32 = re.compile(r'^[a-f0-9]{32}$')
 PARTICIPANT_ID = re.compile(r'^[a-z0-9][a-z0-9._-]{2,63}$')
 PARTICIPANT_KINDS = ('user', 'agent', 'ghostblender', 'relay', 'system')
 
@@ -36,6 +37,8 @@ PARTICIPANT_KINDS = ('user', 'agent', 'ghostblender', 'relay', 'system')
 LEGACY = 'legacy-unattributed'
 # The iPad owner, as the origin of GHOSTroom instructions.
 OWNER = 'owner'
+# The Blender side itself, as the origin of what it observes (files opened and saved).
+GHOSTBLENDER = 'ghostblender'
 
 # chat_messages doubles as the GHOSTroom task queue. One message is one task
 # (an agent turn); later messages to a busy agent may steer its running turn.
@@ -191,6 +194,10 @@ class Store:
             'INSERT OR IGNORE INTO participants(participant_id,kind,provider,display_name,'
             'capability_sha256,created) VALUES (?,?,?,?,NULL,?)',
             (OWNER, 'user', None, 'You', time.time()))
+        self.db.execute(
+            'INSERT OR IGNORE INTO participants(participant_id,kind,provider,display_name,'
+            'capability_sha256,created) VALUES (?,?,?,?,NULL,?)',
+            (GHOSTBLENDER, 'ghostblender', None, 'GhostBlender', time.time()))
         self.db.execute('INSERT OR IGNORE INTO relay_meta VALUES (?,?)',
                         ('ledger_stream_id', uuid.uuid4().hex))
         # Identifies this database's chat_events sequence. A new or replaced
@@ -823,6 +830,8 @@ class Store:
             raise ValueError('heartbeat_too_large')
         with self.lock, self.db:
             self._expire(device_id)
+            previous = self.db.execute('SELECT heartbeat FROM device WHERE id=?', (device_id,)).fetchone()
+            self._observe_file(device_id, json.loads(previous['heartbeat']) if previous else None, heartbeat)
             self.db.execute('INSERT INTO device VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET heartbeat=excluded.heartbeat, seen=excluded.seen',
                             (device_id, heartbeat_json, time.time()))
             ack = None
@@ -876,6 +885,23 @@ class Store:
                            'arguments': json.loads(row['arguments']), 'boot_id': row['boot_id'],
                            'scene_id': row['scene_id'], 'expires_at': row['expires']}
             return {'protocol': 1, 'ack': ack, 'job': job}
+
+    def _observe_file(self, device_id, previous, heartbeat):
+        """Ledger files opened and saved, as GhostBlender observed them (target.md §8)."""
+        now = heartbeat.get('observed') if isinstance(heartbeat.get('observed'), dict) else None
+        before = (previous or {}).get('observed') if isinstance((previous or {}).get('observed'), dict) else None
+        if now is None or before is None:
+            return
+        name, old_name = now.get('file'), before.get('file')
+        if not isinstance(name, str) or not name:
+            return
+        name = name[:200]
+        if name != old_name:
+            self._ledger(device_id, GHOSTBLENDER, 'file', f'{name} is now the open Blender file',
+                         scene_id=heartbeat.get('scene_id') if SHA256_32.fullmatch(str(heartbeat.get('scene_id')))
+                         else None)
+        elif before.get('unsaved_changes') is True and now.get('unsaved_changes') is False:
+            self._ledger(device_id, GHOSTBLENDER, 'file', f'{name} was saved')
 
     def _record_result(self, device_id, row, result, encoded, state):
         """Ledger the device-reported outcome of a job, in the result's transaction."""

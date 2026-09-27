@@ -493,3 +493,20 @@ class GhostroomRelayTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FileObservationTests(unittest.TestCase):
+    def test_open_and_save_are_ledgered_from_heartbeats(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = Store(str(Path(temp) / 'relay.sqlite3'))
+            beat = lambda **observed: {'boot_id': 'b' * 32, 'scene_id': 'c' * 32, 'blender_version': '5.2',
+                                       'native': {'foreground': True}, 'observed': observed}
+            store.exchange('ipad', beat(file=None, unsaved_changes=False))
+            store.exchange('ipad', beat(file='car.blend', unsaved_changes=False))
+            store.exchange('ipad', beat(file='car.blend', unsaved_changes=True))
+            store.exchange('ipad', beat(file='car.blend', unsaved_changes=False))
+            files = [e for e in store.read_ledger('ipad', 0, 200)['entries'] if e['category'] == 'file']
+            store.db.close()
+        self.assertEqual([e['summary'] for e in files],
+                         ['car.blend is now the open Blender file', 'car.blend was saved'])
+        self.assertTrue(all(e['origin']['kind'] == 'ghostblender' for e in files))

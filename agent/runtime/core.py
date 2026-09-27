@@ -105,6 +105,7 @@ class Runtime:
                     'selected': [o.name for o in context.selected_objects][:12],
                     'object_count': len(context.scene.objects), 'frame': context.scene.frame_current,
                     'unsaved_changes': bool(self.bpy.data.is_dirty),
+                    'file': Path(self.bpy.data.filepath).name if self.bpy.data.filepath else None,
                     'rendering': bool(self.bpy.app.is_job_running('RENDER'))}
         except Exception:
             return None

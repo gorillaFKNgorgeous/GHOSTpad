@@ -669,6 +669,8 @@ def build_items(client):
                                 'state': 'running'}
                     items.append(external)
                 _phase_add(external, entry, client)
+        elif entry.get('category') == 'file':
+            items.append({'id': f'l{seq}', 'type': 'system', 'time': when, 'text': entry['summary']})
         elif entry.get('category') == 'lease' and entry.get('lease'):
             lease = entry['lease']
             if lease.get('event') in ('acquired', 'released', 'expired', 'revoked'):

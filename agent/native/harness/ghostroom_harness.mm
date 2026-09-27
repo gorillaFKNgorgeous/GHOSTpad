@@ -223,8 +223,23 @@ static void After(double seconds, dispatch_block_t block)
               Check(composer.window.isKeyWindow, @"GHOSTroom window is key while typing");
               [composer insertText:@"typed"];
               Check([composer.text hasSuffix:@"typed"], @"text input reaches the composer");
+              /* A docked software keyboard covering the lower 45% of the screen. */
+              CGRect screen = composer.window.screen.bounds;
+              CGRect keyboard = CGRectMake(0, screen.size.height * 0.55, screen.size.width, screen.size.height * 0.45);
+              [[NSNotificationCenter defaultCenter]
+                  postNotificationName:UIKeyboardWillChangeFrameNotification
+                                object:nil
+                              userInfo:@{UIKeyboardFrameEndUserInfoKey : [NSValue valueWithCGRect:keyboard],
+                                         UIKeyboardAnimationDurationUserInfoKey : @0}];
+              [composer.window layoutIfNeeded];
+              CGRect box = [composer convertRect:composer.bounds toView:nil];
+              Check(CGRectGetMaxY(box) <= CGRectGetMinY(keyboard) && CGRectGetMinY(box) >= 0,
+                    @"composer stays visible above a docked keyboard");
               Shot(self.window, @"06-keyboard");
               [composer resignFirstResponder];
+              [[NSNotificationCenter defaultCenter] postNotificationName:UIKeyboardWillHideNotification
+                                                                  object:nil
+                                                                userInfo:@{UIKeyboardAnimationDurationUserInfoKey : @0}];
               Check(self.window.isKeyWindow, @"keyboard returns to Blender after typing");
               composer.text = @"";
               CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();

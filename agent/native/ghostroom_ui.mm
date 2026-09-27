@@ -949,6 +949,9 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
 @property(nonatomic, strong) UILabel *activityElapsed;
 @property(nonatomic, strong) UIButton *activityStop;
 @property(nonatomic, strong) UIStackView *recoveryBox;
+@property(nonatomic, strong) UIView *selectorsRow;
+@property(nonatomic, strong) NSLayoutConstraint *panelBottom;
+@property(nonatomic) CGFloat keyboardOverlap;
 @property(nonatomic, strong) UIView *recoveryCard;
 @property(nonatomic, strong) UITableView *table;
 @property(nonatomic, strong) UILabel *emptyLabel;
@@ -1342,6 +1345,7 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
   composerStack.translatesAutoresizingMaskIntoConstraints = NO;
   [composerCard addSubview:composerStack];
 
+  self.selectorsRow = selectors;
   UIStackView *top = GRStack(@[ header, selectors, self.activityBar, self.recoveryBox ],
                              UILayoutConstraintAxisVertical,
                              10);
@@ -1390,17 +1394,27 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
   self.panelWidthConstraint.priority = UILayoutPriorityDefaultHigh;
   self.panelRight = [panel.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12];
   self.panelLeft = [panel.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12];
-  /* Follow the software keyboard (docked or floating) so the composer stays visible. */
-  NSLayoutConstraint *aboveKeyboard =
-      [panel.bottomAnchor constraintEqualToAnchor:self.window.keyboardLayoutGuide.topAnchor constant:-12];
-  aboveKeyboard.priority = UILayoutPriorityDefaultHigh;
+  /* The bottom edge follows the software keyboard explicitly (keyboardWillChange:), as a
+   * required constraint, so the composer can never end up underneath the keyboard. */
+  self.panelBottom = [panel.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-12];
+  NSLayoutConstraint *top = [panel.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12];
+  top.priority = UILayoutPriorityRequired - 1;
   [NSLayoutConstraint activateConstraints:@[
     self.panelWidthConstraint,
     [panel.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor multiplier:0.72],
-    [panel.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12],
-    [panel.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-12],
-    aboveKeyboard,
+    top,
+    [panel.topAnchor constraintGreaterThanOrEqualToAnchor:self.window.topAnchor],
+    self.panelBottom,
   ]];
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+  [center addObserver:self
+             selector:@selector(keyboardWillChange:)
+                 name:UIKeyboardWillChangeFrameNotification
+               object:nil];
+  [center addObserver:self
+             selector:@selector(keyboardWillChange:)
+                 name:UIKeyboardWillHideNotification
+               object:nil];
 
   /* Resize handle on the inner edge: Blender keeps as much screen as the user wants. */
   self.resizeHandle = [[UIView alloc] init];
@@ -1428,6 +1442,45 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
                                                       action:@selector(resizePanel:)]];
   [self.resizeHandle addInteraction:[[UIPointerInteraction alloc] initWithDelegate:nil]];
   [self applyDock];
+}
+
+- (void)keyboardWillChange:(NSNotification *)note
+{
+  if (!self.window) {
+    return;
+  }
+  CGRect screenFrame = [note.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+  CGRect frame = [self.window convertRect:screenFrame fromCoordinateSpace:self.window.screen.coordinateSpace];
+  CGRect bounds = self.window.bounds;
+  CGFloat overlap = 0;
+  BOOL hiding = [note.name isEqualToString:UIKeyboardWillHideNotification];
+  /* A docked keyboard spans the width and reaches the bottom; a floating one does not
+   * push the panel. */
+  if (!hiding && CGRectIntersectsRect(frame, bounds) && frame.size.width >= bounds.size.width * 0.6 &&
+      CGRectGetMaxY(frame) >= CGRectGetMaxY(bounds) - 1)
+  {
+    overlap = MAX(0, CGRectGetMaxY(bounds) - CGRectGetMinY(frame));
+  }
+  self.keyboardOverlap = overlap;
+  CGFloat safeBottom = self.window.safeAreaInsets.bottom;
+  self.panelBottom.constant = -(MAX(overlap - safeBottom, 0) + 12);
+  BOOL compact = overlap > 0;
+  NSTimeInterval duration = [note.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+  [UIView animateWithDuration:duration > 0 ? duration : 0.25
+                   animations:^{
+                     self.selectorsRow.hidden = compact;
+                     self.recoveryBox.hidden = compact;
+                     [self textViewDidChange:self.composer];
+                     [self.window layoutIfNeeded];
+                   }
+                   completion:^(BOOL finished) {
+                     if (compact && self.items.count) {
+                       [self.table scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:(NSInteger)self.items.count - 1
+                                                                             inSection:0]
+                                         atScrollPosition:UITableViewScrollPositionBottom
+                                                 animated:YES];
+                     }
+                   }];
 }
 
 - (void)applyDock
@@ -2152,7 +2205,8 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
   self.placeholder.hidden = textView.text.length > 0;
   CGFloat width = textView.bounds.size.width > 0 ? textView.bounds.size.width : 300;
   CGFloat height = [textView sizeThatFits:CGSizeMake(width, CGFLOAT_MAX)].height;
-  CGFloat maximum = MAX(120.0, self.window.bounds.size.height * 0.32);
+  CGFloat room = self.window.bounds.size.height - self.keyboardOverlap;
+  CGFloat maximum = MAX(90.0, MIN(self.window.bounds.size.height * 0.32, room * 0.3));
   textView.scrollEnabled = height > maximum;
   self.composerHeight.constant = MAX(46, MIN(maximum, height));
 }

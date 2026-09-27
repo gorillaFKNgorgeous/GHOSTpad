@@ -12,6 +12,7 @@ from bpy.props import PointerProperty, StringProperty
 from .core import Runtime, atomic_json
 from . import insight
 from . import ghostroom
+from . import render_output
 
 try:
     import _ghostbridge_transport as native
@@ -270,6 +271,9 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.WindowManager.ghostbridge = PointerProperty(type=GBSettings)
     insight.register()
+    # Renders into folders iPadOS will not let the app write (Files locations, /tmp/)
+    # are redirected into Documents/renders and offered back through "Save to...".
+    render_output.register(native)
     global _room
     # GHOSTroom needs the native overlay compiled into this build. Older builds
     # keep the N-panel and GhostBlender Simple exactly as before.
@@ -309,6 +313,7 @@ def unregister():
     if _load_post in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_load_post)
     insight.unregister()
+    render_output.unregister()
     global _room
     for keymap, item in _KEYMAPS:
         try:

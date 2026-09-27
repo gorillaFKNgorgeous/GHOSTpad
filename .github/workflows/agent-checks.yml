@@ -30,7 +30,7 @@ jobs:
           agent/relay/chat.py agent/relay/chat_login.py agent/relay/participants.py
           agent/relay/router.py agent/relay/room.py agent/relay/claude_agent.py agent/relay/agent_secrets.py
           agent/runtime/__init__.py agent/runtime/core.py agent/runtime/insight.py
-          agent/runtime/ghostroom.py
+          agent/runtime/ghostroom.py agent/runtime/render_output.py
       - run: python -m unittest discover -s agent/tests -v
       - name: Validate GHOSTroom protocol schemas and fixtures
         run: |

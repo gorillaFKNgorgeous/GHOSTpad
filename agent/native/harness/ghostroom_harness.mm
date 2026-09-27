@@ -16,6 +16,7 @@
 extern "C" void ghostroom_harness_update(NSString *json);
 extern "C" NSArray<NSString *> *ghostroom_harness_take(void);
 extern "C" id ghostroom_harness_controller(void);
+extern "C" void ghostroom_harness_export(NSArray<NSString *> *paths, NSString *directory, NSString *title);
 
 /* Stand-in for Blender's GHOSTUIWindow: it consumes hardware key presses and owns a
  * window-level long-press, exactly the behaviours that broke typing and menus when
@@ -281,6 +282,12 @@ static void After(double seconds, dispatch_block_t block)
                 Shot(self.window, @"08-agents");
                 Shot(composer.window, @"08b-agents-overlay");
                 [presented dismissViewControllerAnimated:NO completion:nil];
+                NSString *render = [NSTemporaryDirectory() stringByAppendingPathComponent:@"render_test.mp4"];
+                [@"x" writeToFile:render atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                ghostroom_harness_export(@[ render ], NSTemporaryDirectory(), @"Rendered into GHOSTpad/renders");
+                UIViewController *explain = composer.window.rootViewController.presentedViewController;
+                Check([explain isKindOfClass:[UIAlertController class]], @"render export offers Save to Files");
+                [explain dismissViewControllerAnimated:NO completion:nil];
                 [controller togglePanel];
                 After(0.8, ^{
                   UIView *pill = [controller valueForKey:@"pill"];

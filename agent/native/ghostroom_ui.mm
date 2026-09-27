@@ -2684,6 +2684,98 @@ typedef NS_ENUM(NSInteger, GRDock) { GRDockRight = 0, GRDockLeft = 1 };
 
 @end
 
+
+/* ------------------------------------------------------------------------ export to Files */
+
+/* Moves files GhostBlender produced (e.g. a render that could not be written to the
+ * chosen Files folder) to a location the user picks, opened at the original folder. */
+@interface GRExporter : NSObject <UIDocumentPickerDelegate>
+@end
+
+@implementation GRExporter
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
+{
+}
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller
+{
+}
+@end
+
+static UIViewController *GRTopController(void)
+{
+  UIWindow *best = nil;
+  for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+    if (![scene isKindOfClass:[UIWindowScene class]]) {
+      continue;
+    }
+    for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+      if (window.hidden || !window.rootViewController) {
+        continue;
+      }
+      /* Prefer GHOSTroom's own window: Blender's window gestures stay out of the sheet. */
+      if ([window isKindOfClass:[GROverlayWindow class]]) {
+        best = window;
+        break;
+      }
+      if (!best && window.isKeyWindow) {
+        best = window;
+      }
+    }
+    if (best) {
+      break;
+    }
+  }
+  UIViewController *controller = best.rootViewController;
+  while (controller.presentedViewController) {
+    controller = controller.presentedViewController;
+  }
+  return controller;
+}
+
+extern "C" void GRPresentExport(NSArray<NSString *> *paths, NSString *directory, NSString *title)
+{
+  NSMutableArray<NSURL *> *urls = [NSMutableArray array];
+  for (NSString *path in paths) {
+    if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+      [urls addObject:[NSURL fileURLWithPath:path]];
+    }
+  }
+  UIViewController *presenter = GRTopController();
+  if (!urls.count || !presenter) {
+    return;
+  }
+  static GRExporter *delegate;
+  if (!delegate) {
+    delegate = [[GRExporter alloc] init];
+  }
+  UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:urls
+                                                                                                  asCopy:NO];
+  picker.delegate = delegate;
+  if (directory.length) {
+    picker.directoryURL = [NSURL fileURLWithPath:directory isDirectory:YES];
+  }
+  picker.modalPresentationStyle = UIModalPresentationFormSheet;
+  if (title.length) {
+    UIAlertController *explain = [UIAlertController alertControllerWithTitle:@"Render finished"
+                                                                     message:title
+                                                              preferredStyle:UIAlertControllerStyleAlert];
+    [explain addAction:[UIAlertAction actionWithTitle:@"Keep in GHOSTpad"
+                                                style:UIAlertActionStyleCancel
+                                              handler:nil]];
+    [explain addAction:[UIAlertAction actionWithTitle:@"Save to…"
+                                                style:UIAlertActionStyleDefault
+                                              handler:^(UIAlertAction *a) {
+                                                [GRTopController() presentViewController:picker
+                                                                                animated:YES
+                                                                              completion:nil];
+                                              }]];
+    [presenter presentViewController:explain animated:YES completion:nil];
+  }
+  else {
+    [presenter presentViewController:picker animated:YES completion:nil];
+  }
+}
+
 /* ------------------------------------------------------------------------ Python bridge */
 
 #ifdef GHOSTROOM_HARNESS
@@ -2707,6 +2799,11 @@ extern "C" id ghostroom_harness_controller(void)
 {
   return [GRController shared];
 }
+
+extern "C" void ghostroom_harness_export(NSArray<NSString *> *paths, NSString *directory, NSString *title)
+{
+  GRPresentExport(paths, directory, title);
+}
 #else
 
 extern "C" PyObject *ghostroom_py_update(PyObject * /*self*/, PyObject *args)
@@ -2728,6 +2825,27 @@ extern "C" PyObject *ghostroom_py_update(PyObject * /*self*/, PyObject *args)
   /* Never re-enter UIKit layout from inside Blender's timer: apply on the next run-loop turn. */
   dispatch_async(dispatch_get_main_queue(), ^{
     [[GRController shared] applySnapshot:snapshot];
+  });
+  Py_RETURN_NONE;
+}
+
+extern "C" PyObject *ghostroom_py_export(PyObject * /*self*/, PyObject *args)
+{
+  const char *json;
+  Py_ssize_t length;
+  if (!PyArg_ParseTuple(args, "s#", &json, &length)) {
+    return nullptr;
+  }
+  NSData *data = [NSData dataWithBytes:json length:(NSUInteger)length];
+  NSDictionary *request = GRDict([NSJSONSerialization JSONObjectWithData:data options:0 error:nil]);
+  if (!request) {
+    return PyErr_Format(PyExc_ValueError, "invalid_export_request");
+  }
+  NSArray *paths = GRArr(request[@"paths"]);
+  NSString *directory = GRStr(request[@"directory"]);
+  NSString *title = GRStr(request[@"title"]);
+  dispatch_async(dispatch_get_main_queue(), ^{
+    GRPresentExport(paths, directory, title);
   });
   Py_RETURN_NONE;
 }

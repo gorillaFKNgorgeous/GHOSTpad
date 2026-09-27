@@ -44,7 +44,7 @@ PR layout. GHOSTpad stays one public repository; there is no separate service re
 | --- | --- | --- |
 | #2 | `claude/ghostroom-protocol-groundwork-moht84` | protocol groundwork, secret-scan CI, script-workspace investigation doc |
 | #3 | `claude/chat-cursor-reset-fix` (from `main`) | cursor fix only: `store.py`, `insight.py`, `test_chat_cursor.py` |
-| next | stacked on #2 | B1.5 participant identity, B2 ledger, B3 leases, script-workspace lock |
+| #4 | `claude/relay-participants-ledger-leases` (stacked on #2) | B1.5 participant identity, B2 ledger, B3 leases, script-workspace lock |
 
 - [x] **Cursor fix split into PR #3** and removed from this branch. The
       docs here describe it as "PR #3".
@@ -55,15 +55,26 @@ PR layout. GHOSTpad stays one public repository; there is no separate service re
       The bridge never auto-loads the workspace. Whether the live device has a
       loader installed by earlier privileged Python is UNKNOWN; the read-only
       probe needs approval.
-- [ ] **B1.5 participant identity**: a capability maps server-side to a
-      participant_id. `clientInfo` is an unverified label only. The existing
-      shared Simple capability maps to `legacy-unattributed`.
-- [ ] **B2 ledger** in the relay database, written in the same transaction as
-      the state change. Never infers success.
-- [ ] **B3 edit leases**, enforced from the start: explicit `lease_id` or an
-      implicit per-job scene lease; `lease_conflict` otherwise.
-- [ ] **Script workspace lock**, separate from the scene lease. Every
-      `write_script` is ledgered as a persistent-code risk.
+- [x] **B1.5 participant identity**: `/mcp/p/<capability>` maps to a
+      participant through a sha256 lookup. `clientInfo` is only an unverified
+      label. The shared Simple capability, bearer and OAuth routes map to
+      `legacy-unattributed`. The embedded worker is `codex-embedded`.
+      `participants.py` is the CLI.
+- [x] **B2 ledger**: the `ledger` table is append-only, written in the same
+      transaction as the change, and read with `read_ledger`. Outcomes are
+      never inferred.
+- [x] **B3 edit leases**: explicit leases (`acquire_lease`/`release_lease`) or
+      an implicit per-job scene lease, with typed `lease_conflict`/`lease_invalid`.
+      Inspection is concurrent.
+- [x] **Script workspace lock**: an implicit `script_workspace` lease per write
+      (`script_workspace_busy`). Every write is a `persistent_code` ledger entry.
+      Design: `docs/ghostroom/RELAY-IDENTITY-LEDGER-LEASES.md`.
+- Tests: `agent/tests/test_participants_ledger_leases.py` (29 tests, stdlib) and
+  `ghostroom/tests/test_relay_ledger_schema.py`, which checks real relay output
+  against the schema.
+- Deploy notes: redeploying the relay (it now contains `participants.py`) also
+  reloads the Caddyfile with the new `/mcp/p/*` route. The existing connector
+  URL keeps working. Leases are enforced as soon as the relay restarts.
 
 ## How to resume
 

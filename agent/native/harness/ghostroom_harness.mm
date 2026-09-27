@@ -10,6 +10,8 @@
 #import <UIKit/UIKit.h>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <unistd.h>
 
 extern "C" void ghostroom_harness_update(NSString *json);
 extern "C" NSArray<NSString *> *ghostroom_harness_take(void);
@@ -39,9 +41,23 @@ extern "C" id ghostroom_harness_controller(void);
 @end
 
 static int failures = 0;
+static const char *volatile lastStep = "launch";
+
+/* A frozen main thread cannot run the harness's own timeout. This background
+ * watchdog reports the last completed step and exits so CI shows where it hung. */
+static void StartWatchdog(void)
+{
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    [NSThread sleepForTimeInterval:75];
+    fprintf(stdout, "HARNESS WATCHDOG: main thread stuck after step '%s'\n", lastStep);
+    fflush(stdout);
+    _exit(4);
+  });
+}
 
 static void Check(BOOL ok, NSString *what)
 {
+  lastStep = strdup(what.UTF8String);
   printf("%s %s\n", ok ? "PASS" : "FAIL", what.UTF8String);
   fflush(stdout);
   if (!ok) {
@@ -288,6 +304,7 @@ static void After(double seconds, dispatch_block_t block)
 int main(int argc, char *argv[])
 {
   setvbuf(stdout, nullptr, _IONBF, 0);
+  StartWatchdog();
   @autoreleasepool {
     return UIApplicationMain(argc, argv, nil, NSStringFromClass([HarnessDelegate class]));
   }

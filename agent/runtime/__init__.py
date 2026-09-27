@@ -11,6 +11,7 @@ from bpy.app.handlers import persistent
 from bpy.props import PointerProperty, StringProperty
 from .core import Runtime, atomic_json
 from . import insight
+from . import ghostroom
 
 try:
     import _ghostbridge_transport as native
@@ -24,6 +25,7 @@ _next_request = 0.0
 _failures = 0
 _status = 'Disconnected'
 _root = None
+_room = None
 
 
 def _token_fingerprint(token):
@@ -59,8 +61,38 @@ def _load_post(_):
         _runtime.scene_changed()
 
 
+def _get_runtime():
+    global _runtime
+    if not _runtime and native and _root:
+        _runtime = Runtime(bpy, native, _root)
+    return _runtime
+
+
+def _room_tick():
+    """Serve the native GHOSTroom. Never allowed to break the bridge."""
+    global _next_request
+    if _room is None:
+        return
+    try:
+        for command in _room.take_commands():
+            _room.handle(command)
+        if not _config.get('enabled'):
+            _room.set_connection('not_paired', 'GhostBlender is not paired',
+                                 'Pair the relay in Blender: N-panel → GhostBlender → Agent Connection.')
+        elif _status.startswith('Paused'):
+            _room.set_connection('paused', 'Paused while GHOSTpad is inactive')
+        elif _status.startswith(('Reconnecting', 'Pairing rejected')):
+            _room.set_connection('offline', 'Relay unavailable', _status)
+        if _room.urgent and not _waiting:
+            _next_request = min(_next_request, time.monotonic())
+        _room.push()
+    except Exception as exc:
+        print('GHOSTroom error: ' + type(exc).__name__ + ': ' + str(exc)[:200])
+
+
 def _tick():
     global _runtime, _waiting, _next_request, _failures, _status
+    _room_tick()
     try:
         if not native or not _config.get('enabled'):
             return 1.0
@@ -85,6 +117,11 @@ def _tick():
             if data.get('protocol') != 1:
                 raise RuntimeError('incompatible_relay')
             insight.apply_chat(data.get('chat'))
+            if _room is not None and 'room' in data:
+                try:
+                    _room.apply(data['room'])
+                except Exception as exc:
+                    print('GHOSTroom apply error: ' + type(exc).__name__)
             if data.get('ack'):
                 _runtime.acknowledge(data['ack'])
             _status = 'Connected'
@@ -92,13 +129,20 @@ def _tick():
             job = data.get('job')
             if job:
                 _status = 'Executing ' + str(job.get('operation', 'command'))
-                _runtime.execute(job)
+                if _room is not None:
+                    _room.job_started(job)
+                outbox = _runtime.execute(job)
+                if _room is not None:
+                    _room.job_executed(job, outbox)
                 _status = 'Connected'
-            _next_request = time.monotonic() + (0.05 if _runtime.outbox else 1.0)
+            interval = _room.poll_interval() if _room is not None else 1.0
+            _next_request = time.monotonic() + (0.05 if _runtime.outbox else interval)
         if not _waiting and time.monotonic() >= _next_request:
             body = {'protocol': 1, 'device_id': _config['device_id'],
                     'heartbeat': _runtime.heartbeat(), 'completed': _runtime.outbox,
                     'chat': insight.chat_payload()}
+            if _room is not None:
+                body['room'] = _room.payload()
             native.request(_config['relay_url'] + '/device/exchange', _config['device_token'],
                            json.dumps(body, separators=(',', ':'), allow_nan=False))
             _waiting = True
@@ -189,9 +233,26 @@ class GBPanel(bpy.types.Panel):
             layout.prop(settings, 'device_token')
             layout.label(text='Agent access includes Python and screen capture.')
             layout.operator('ghostbridge.connect')
+        if _room is not None:
+            layout.operator('ghostroom.open', icon='OUTLINER_DATA_LIGHTPROBE')
 
 
-_CLASSES = (GBSettings, GBConnect, GBDisconnect, GBPanel)
+class GROpen(bpy.types.Operator):
+    bl_idname = 'ghostroom.open'
+    bl_label = 'Open GHOSTroom'
+    bl_description = 'Open the native GHOSTroom workspace over Blender'
+
+    @classmethod
+    def poll(cls, context):
+        return _room is not None
+
+    def execute(self, context):
+        _room.request_open()
+        return {'FINISHED'}
+
+
+_CLASSES = (GBSettings, GBConnect, GBDisconnect, GBPanel, GROpen)
+_KEYMAPS = []
 
 
 def register():
@@ -209,6 +270,20 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.WindowManager.ghostbridge = PointerProperty(type=GBSettings)
     insight.register()
+    global _room
+    # GHOSTroom needs the native overlay compiled into this build. Older builds
+    # keep the N-panel and GhostBlender Simple exactly as before.
+    if hasattr(native, 'room_update') and hasattr(native, 'room_take'):
+        try:
+            _room = ghostroom.RoomClient(_root, native, _get_runtime, bpy)
+        except Exception as exc:
+            _room = None
+            print('GHOSTroom unavailable: ' + type(exc).__name__)
+        keyconfig = bpy.context.window_manager.keyconfigs.addon if bpy.context.window_manager else None
+        if _room is not None and keyconfig:
+            keymap = keyconfig.keymaps.new(name='Window', space_type='EMPTY')
+            _KEYMAPS.append((keymap, keymap.keymap_items.new('ghostroom.open', 'G', 'PRESS', oskey=True,
+                                                             shift=True)))
     # WindowManager may not exist during early startup; fill the fields on the first tick.
     def fill_settings():
         wm = bpy.context.window_manager
@@ -234,6 +309,16 @@ def unregister():
     if _load_post in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_load_post)
     insight.unregister()
+    global _room
+    for keymap, item in _KEYMAPS:
+        try:
+            keymap.keymap_items.remove(item)
+        except Exception:
+            pass
+    _KEYMAPS.clear()
+    if _room is not None:
+        _room.close()
+        _room = None
     del bpy.types.WindowManager.ghostbridge
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)

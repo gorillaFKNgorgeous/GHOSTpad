@@ -44,7 +44,7 @@ LEASE_MIN_SECONDS, LEASE_MAX_SECONDS, LEASE_DEFAULT_SECONDS = 10, 600, 120
 # The bridge itself never does (known from source). The device is 'unknown'
 # until the read-only probe in docs/ghostroom/SCRIPT-WORKSPACE.md is run;
 # set to 'none' or 'known' from its result.
-SCRIPT_DEVICE_AUTO_LOAD = 'unknown'
+SCRIPT_DEVICE_AUTO_LOAD = 'none'
 
 # Device errors raised before the operation ran (agent/runtime/core.py:119-126).
 # These are known not to have executed, so they cannot have changed anything.

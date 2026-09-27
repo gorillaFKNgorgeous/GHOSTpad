@@ -369,7 +369,7 @@ class ScriptWorkspaceTests(RelayCase):
                              ('tool.py', previous, True))
             self.assertEqual(code['resulting_sha256'], relay.sha256_text('x = 2\n'))
             self.assertFalse(code['loaded_by_bridge_at_startup'])
-            self.assertEqual(code['device_auto_load'], 'unknown')
+            self.assertEqual(code['device_auto_load'], 'none')
             self.assertEqual((code['request_id'], code['job_id']), ('write-004', job['job_id']))
         self.assertTrue(entries[-1]['persistent_code']['confirmed_by_device'])
         self.assertNotIn('x = 2', json.dumps(entries))

@@ -1,0 +1,8 @@
+{
+  "why": "persistent_code entries must carry the persistent_code record",
+  "base": "ledger/persistent_code_write.json",
+  "expect": "'persistent_code' is a required",
+  "remove": [
+    "/persistent_code"
+  ]
+}

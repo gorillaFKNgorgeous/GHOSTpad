@@ -1,0 +1,9 @@
+{
+  "why": "lease refusals happen before anything runs",
+  "base": "failure/lease_conflict.json",
+  "expect": "mutation_possible: False was expected",
+  "set": {
+    "/mutation_possible": true,
+    "/retry": "after_inspect"
+  }
+}

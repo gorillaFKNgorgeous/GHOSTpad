@@ -4,15 +4,26 @@
   "title": "GHOSTroom edit lease",
   "description": "Authority to mutate Blender. Inspection needs no lease. At most one active lease per scope may overlap, and mutating jobs must carry the lease_id. GHOSTpad always knows who holds it.",
   "type": "object",
-  "required": ["lease_id", "holder", "acquired_at", "expires_at", "scope", "state"],
+  "required": [
+    "lease_id",
+    "holder",
+    "acquired_at",
+    "expires_at",
+    "scope",
+    "state"
+  ],
   "additionalProperties": false,
   "properties": {
-    "lease_id": { "$ref": "common.schema.json#/$defs/id" },
+    "lease_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
     "holder": {
       "description": "The user or an agent. The user can always take the lease back.",
       "$ref": "common.schema.json#/$defs/origin"
     },
-    "acquired_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "acquired_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
     "expires_at": {
       "description": "Hard expiry. Holders renew before this time. An expired lease grants nothing, even if a job is still running.",
       "$ref": "common.schema.json#/$defs/timestamp"
@@ -20,38 +31,114 @@
     "scope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "scene_id"],
+      "required": [
+        "kind"
+      ],
       "properties": {
         "kind": {
-          "description": "scene: the whole scene. objects/collection: named datablocks only. file: save/open/revert (implies scene).",
-          "enum": ["scene", "objects", "collection", "file"]
+          "description": "scene: the whole scene. objects/collection: named datablocks only. file: save/open/revert (implies scene). script_workspace: the persistent agent-script directory; separate from any scene lease and independent of scene_id.",
+          "enum": [
+            "scene",
+            "objects",
+            "collection",
+            "file",
+            "script_workspace"
+          ]
         },
-        "scene_id": { "$ref": "common.schema.json#/$defs/blender_id" },
-        "boot_id": { "$ref": "common.schema.json#/$defs/blender_id" },
+        "scene_id": {
+          "$ref": "common.schema.json#/$defs/blender_id"
+        },
+        "boot_id": {
+          "$ref": "common.schema.json#/$defs/blender_id"
+        },
         "targets": {
           "type": "array",
           "minItems": 1,
           "maxItems": 256,
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
         }
       },
       "allOf": [
         {
-          "if": { "properties": { "kind": { "enum": ["objects", "collection"] } } },
-          "then": { "required": ["targets"] }
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "objects",
+                  "collection"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "targets"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "not": {
+                  "const": "script_workspace"
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "scene_id"
+            ]
+          }
         }
       ]
     },
-    "state": { "enum": ["active", "released", "expired", "revoked"] },
-    "task": { "$ref": "common.schema.json#/$defs/id" },
-    "revoked_by": { "$ref": "common.schema.json#/$defs/origin" },
-    "reason": { "type": "string", "maxLength": 500 }
+    "state": {
+      "enum": [
+        "active",
+        "released",
+        "expired",
+        "revoked"
+      ]
+    },
+    "task": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "revoked_by": {
+      "$ref": "common.schema.json#/$defs/origin"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "implicit": {
+      "description": "True for a lease the relay took automatically for exactly one job. It ends with that job.",
+      "type": "boolean"
+    },
+    "job_id": {
+      "$ref": "common.schema.json#/$defs/id"
+    }
   },
   "allOf": [
     {
-      "if": { "properties": { "state": { "const": "revoked" } } },
-      "then": { "required": ["revoked_by"] }
+      "if": {
+        "properties": {
+          "state": {
+            "const": "revoked"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "revoked_by"
+        ]
+      }
     }
   ]
 }

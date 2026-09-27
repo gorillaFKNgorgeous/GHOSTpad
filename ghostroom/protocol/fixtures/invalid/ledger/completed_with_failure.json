@@ -1,0 +1,14 @@
+{
+  "why": "success never carries a failure",
+  "base": "ledger/persistent_code_write.json",
+  "expect": "should not be valid",
+  "set": {
+    "/failure": {
+      "code": "tool_error",
+      "layer": "tool",
+      "message": "x",
+      "mutation_possible": false,
+      "retry": "safe"
+    }
+  }
+}

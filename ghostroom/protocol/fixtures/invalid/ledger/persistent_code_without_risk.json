@@ -1,0 +1,8 @@
+{
+  "why": "write_script entries must be marked as a persistent-code risk",
+  "base": "ledger/persistent_code_write.json",
+  "expect": "'risk' is a required",
+  "remove": [
+    "/persistent_code/risk"
+  ]
+}

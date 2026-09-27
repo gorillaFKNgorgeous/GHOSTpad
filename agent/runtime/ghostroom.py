@@ -69,6 +69,10 @@ class RoomClient:
         self._save_due = 0.0
         self._fetch_wait = 0.0
         self.urgent = False
+        # Setup controls may carry a credential: kept in memory only, never in state.json.
+        self.volatile_controls = []
+        self.setup_results = {}
+        self.revealed = {}
         self.open_requests = 0
         self.ui_open = False
         self.state = self._load()
@@ -180,6 +184,24 @@ class RoomClient:
             self.state['attachments'] = [a for a in self.state['attachments'] if a['id'] != command.get('id')]
         elif kind == 'recovery':
             self.recovery_action(command.get('action'))
+        elif kind == 'agent_setup' and isinstance(command.get('agent_id'), str):
+            control = {'id': _hex(), 'action': 'agent_setup', 'agent_id': command['agent_id'],
+                       'op': str(command.get('op', ''))}
+            if isinstance(command.get('secret'), str):
+                control['secret'] = command['secret']
+            self.volatile_controls.append(control)
+            self.setup_results[command['agent_id']] = {'state': 'sending', 'message': 'Sending to the relay…'}
+            self.urgent = True
+        elif kind == 'connector_create':
+            self.volatile_controls.append({'id': _hex(), 'action': 'connector_create',
+                                           'name': str(command.get('name', ''))[:60]})
+            self.setup_results['connector'] = {'state': 'sending', 'message': 'Creating connector…'}
+            self.urgent = True
+        elif kind == 'connector_revoke' and isinstance(command.get('participant_id'), str):
+            self.volatile_controls.append({'id': _hex(), 'action': 'connector_revoke',
+                                           'participant_id': command['participant_id']})
+            self.revealed.pop(command['participant_id'], None)
+            self.urgent = True
         elif kind == 'forward_note':
             self.forward_note(command.get('item_id'))
         elif kind == 'fetch' and isinstance(command.get('artifact_id'), str):
@@ -361,8 +383,9 @@ class RoomClient:
                 break
         if ready:
             room['messages'] = ready
-        if outbox['controls']:
-            room['controls'] = outbox['controls'][:8]
+        controls = (outbox['controls'] + self.volatile_controls)[:8]
+        if controls:
+            room['controls'] = controls
         queue = self.state.get('fetch_queue') or []
         if queue and time.monotonic() >= self._fetch_wait and 'artifacts' not in room:
             room['fetch'] = queue[0]
@@ -388,8 +411,25 @@ class RoomClient:
                         {'id': 'x' + message['id'], 'time': _now(), 'text': f"Not sent: {rejected[message['id']]}",
                          'message': message['text'][:200]})
         outbox['messages'] = [m for m in outbox['messages'] if m['id'] not in acked and m['id'] not in rejected]
-        done_controls = {a.get('id') for a in room.get('control_acks', [])}
-        outbox['controls'] = [c for c in outbox['controls'] if c['id'] not in done_controls]
+        acks = {a.get('id'): a for a in room.get('control_acks', []) if isinstance(a, dict)}
+        for control in self.volatile_controls:
+            ack = acks.get(control['id'])
+            if ack is None:
+                continue
+            key = control.get('agent_id') or 'connector'
+            ok = ack.get('result') not in (None, 'rejected')
+            result = ack.get('result')
+            if control['action'] == 'connector_create' and isinstance(result, dict) and result.get('url'):
+                self.revealed[result['participant_id']] = {'name': result.get('name'), 'url': result['url']}
+                result = f"Connector for {result.get('name')} created — copy its URL now"
+            self.setup_results[key] = {'state': 'ok' if ok else 'error',
+                                       'message': str(result if ok else ack.get('error', 'rejected'))[:200]}
+        self.volatile_controls = [c for c in self.volatile_controls if c['id'] not in acks]
+        outbox['controls'] = [c for c in outbox['controls'] if c['id'] not in acks]
+        if isinstance(room.get('setup'), dict):
+            self.relay_setup = room['setup']
+        if isinstance(room.get('connectors'), list):
+            self.connectors = room['connectors']
         uploaded = set(room.get('artifact_acks', []))
         failed_uploads = {p.get('artifact_id') for p in room.get('problems', []) if p.get('artifact_id')}
         for upload in outbox['uploads']:
@@ -439,7 +479,10 @@ class RoomClient:
                     pass
             self._fetch_wait = 0.0
         state['last_sync'] = _now()
-        self.urgent = bool(room.get('more')) or bool(outbox['messages']) or bool(outbox['controls'])
+        pending_setup = any(v.get('state') == 'pending' for v in getattr(self, 'relay_setup', {}).values())
+        self.urgent = (bool(room.get('more')) or bool(outbox['messages']) or bool(outbox['controls'])
+                       or bool(self.volatile_controls))
+        self.setup_polling = pending_setup
         self.connection = {'state': 'connected', 'label': 'Connected', 'detail': ''}
         self._queue_missing_evidence()
         self.mark()
@@ -509,6 +552,8 @@ class RoomClient:
     def poll_interval(self):
         if self.urgent:
             return 0.05
+        if getattr(self, 'setup_polling', False):
+            return 0.5
         if any(t.get('state') in ACTIVE_STATES for t in self.state.get('tasks', [])):
             return 0.5
         return 0.6 if self.ui_open else 1.0
@@ -517,7 +562,9 @@ class RoomClient:
 # ---------------------------------------------------------------------- presentation
 
 def _agent_names(state):
-    return {a['agent_id']: a.get('display_name', a['agent_id']) for a in state.get('agents', [])}
+    names = {'legacy-unattributed': 'GhostBlender Simple agent'}
+    names.update({a['agent_id']: a.get('display_name', a['agent_id']) for a in state.get('agents', [])})
+    return names
 
 
 def _origin_name(origin):
@@ -799,6 +846,31 @@ def recovery_info(client):
             'evidence_path': evidence_path}
 
 
+def setup_snapshot(client, agents):
+    """Agents & connections: sign-in, API keys and external connectors, managed from GHOSTroom."""
+    relay = getattr(client, 'relay_setup', {}) or {}
+    rows = []
+    for agent in agents:
+        remote = relay.get(agent['id'])
+        entry = {'id': agent['id'], 'name': agent['name'], 'provider': agent['provider'], 'state': agent['state'],
+                 'auth': agent['auth'], 'external': agent['provider'] == 'external',
+                 'methods': (remote or {}).get('methods', []), 'setup_state': (remote or {}).get('state', 'idle'),
+                 'message': (remote or {}).get('message') or agent.get('reason') or agent.get('activity', ''),
+                 'url': (remote or {}).get('url'), 'code': (remote or {}).get('code')}
+        local = client.setup_results.get(agent['id'])
+        if local:
+            entry['result'] = local
+        rows.append(entry)
+    connectors = []
+    for item in getattr(client, 'connectors', []) or []:
+        revealed = client.revealed.get(item['participant_id'])
+        connectors.append({'participant_id': item['participant_id'], 'name': item.get('name'),
+                           'client': item.get('client'), 'last_seen': item.get('last_seen'),
+                           'url': revealed['url'] if revealed else None,
+                           'shared': item['participant_id'] == 'legacy-unattributed'})
+    return {'agents': rows, 'connectors': connectors, 'connector_result': client.setup_results.get('connector')}
+
+
 def build_snapshot(client):
     state = client.state
     items = build_items(client)
@@ -826,5 +898,6 @@ def build_snapshot(client):
         'attachments': [{k: a.get(k) for k in ('id', 'kind', 'title', 'subtitle', 'state', 'path')}
                         for a in state['attachments']],
         'recovery': recovery_info(client), 'pending': len(state['outbox']['messages']),
+        'setup': setup_snapshot(client, agents),
         'last_sync': state.get('last_sync'),
     }

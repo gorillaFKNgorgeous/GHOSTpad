@@ -93,3 +93,9 @@ protocol exist and are exercised, and the UI surface is deliberately thin or def
 - `agent-checks.yml / native-syntax`: both native files compile against the iOS 26 SDK with `-Wall`.
 - `agent-checks.yml / ghostroom-simulator`: the real `ghostroom_ui.mm` runs in an iPad simulator, fed snapshots produced by the real relay and runtime (`agent/native/harness/make_snapshots.py`). It is driven like a user (open, send multiline, stop, dock, keyboard, 160-item timeline, minimise), the commands it returns are checked, Auto Layout conflicts are counted, and screenshots are uploaded.
 - Device acceptance still requires the next IPA on the physical iPad, and a relay redeploy (new files: `router.py`, `room.py`, `claude_agent.py`).
+
+## Update: device feedback round 1
+
+- **External agents are full participants.** Agents using GhostBlender Simple or a personal connector call `room_read`, `room_start` and `room_post`. Their jobs automatically form a session task that the user can watch, stop and recover. The user can message them from the picker, and they read it on their next `room_read`.
+- **Agents & connections in GHOSTroom.** Codex device-code sign-in and sign-out, Claude API key, and connector URLs are all managed from the agent menu → *Agents & connections…*, with no relay redeploy. Credentials live only in `/data/agent-secrets.json` (0600) on the relay, and only in memory on the device.
+- **Own window.** GHOSTroom now runs in its own passthrough `UIWindow` above Blender's. Blender's `GHOSTUIWindow` consumes hardware key presses and has window-level gestures, which blocked typing and the attach/agent menus.

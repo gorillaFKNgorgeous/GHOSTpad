@@ -180,6 +180,7 @@ static PyObject *gb_status(PyObject *, PyObject *)
 /* GHOSTroom native workspace (ghostroom_ui.mm). */
 extern "C" PyObject *ghostroom_py_update(PyObject *, PyObject *);
 extern "C" PyObject *ghostroom_py_take(PyObject *, PyObject *);
+extern "C" PyObject *ghostroom_py_export(PyObject *, PyObject *);
 
 static PyMethodDef methods[] = {
     {"request", gb_request, METH_VARARGS, "Start one authenticated asynchronous HTTPS POST."},
@@ -188,6 +189,7 @@ static PyMethodDef methods[] = {
     {"status", gb_status, METH_NOARGS, "Foreground state and measured process memory."},
     {"room_update", ghostroom_py_update, METH_VARARGS, "Render a GHOSTroom snapshot (JSON) natively."},
     {"room_take", ghostroom_py_take, METH_NOARGS, "Take pending GHOSTroom UI commands (JSON strings)."},
+    {"export_files", ghostroom_py_export, METH_VARARGS, "Offer files to move into Files (JSON request)."},
     {nullptr, nullptr, 0, nullptr},
 };
 static PyModuleDef module = {PyModuleDef_HEAD_INIT, "_ghostbridge_transport", nullptr, -1, methods,

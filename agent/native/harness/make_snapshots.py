@@ -91,6 +91,7 @@ class Builder(AgentAdapter):
 
 class Reviewer(AgentAdapter):
     agent_id, provider, display_name, participant_id = 'claude', 'claude', 'Claude', 'claude-embedded'
+    setup_methods = ('api_key', 'sign_out')
 
     def probe(self):
         return {'availability': 'unavailable', 'auth': 'signed_out', 'quota': 'unknown',
@@ -130,7 +131,9 @@ def main(out):
     builder = router.register(Builder())
     router.register(Reviewer())
     router.probe_now()
-    room = Room(store, 'ipad', router)
+    room = Room(store, 'ipad', router, public_origin='https://relay.example')
+    store.register_participant('chatgpt-desktop', 'agent', 'ChatGPT desktop', provider='external')
+    store.touch_participant('chatgpt-desktop')
     native = Native()
     client = ghostroom.RoomClient(temp + '/device', native)
 

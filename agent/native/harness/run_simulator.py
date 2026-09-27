@@ -45,9 +45,9 @@ def main(out):
                      timeout=180)
         output = run.stdout + run.stderr
     except subprocess.TimeoutExpired as exc:
-        output = (exc.stdout or '') + (exc.stderr or '') + '\nHARNESS LAUNCH TIMEOUT'
-        if isinstance(output, bytes):
-            output = output.decode(errors='replace')
+        parts = [exc.stdout or b'', exc.stderr or b'']
+        output = ''.join(p.decode(errors='replace') if isinstance(p, bytes) else p for p in parts)
+        output += '\nHARNESS LAUNCH TIMEOUT'
     print(output)
     shots = out / 'screenshots'
     shots.mkdir(exist_ok=True)

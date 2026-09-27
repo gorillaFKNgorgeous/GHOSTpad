@@ -16,6 +16,7 @@ from pathlib import Path
 import server
 from chat import CodexAdapter
 from router import AgentRouter
+from agent_secrets import AgentSecrets
 
 
 def build_router(app, port):
@@ -25,8 +26,10 @@ def build_router(app, port):
     adapter whose provider is not signed in or configured still appears, with
     its unavailability and reason, so GHOSTroom can say so before a turn fails.
     """
+    secrets = AgentSecrets(Path(os.environ.get('DATABASE_PATH', '/data/ghostblender.sqlite3')).parent
+                           / 'agent-secrets.json')
     router = AgentRouter(app.store, app.device_id, f'http://127.0.0.1:{port}',
-                         default_agent=os.environ.get('GHOSTROOM_DEFAULT_AGENT') or None)
+                         default_agent=os.environ.get('GHOSTROOM_DEFAULT_AGENT') or None, secrets=secrets)
     names = [n.strip() for n in os.environ.get('GHOSTROOM_AGENTS', 'codex,claude').split(',') if n.strip()]
     for name in names:
         if name == 'codex':

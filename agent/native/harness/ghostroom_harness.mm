@@ -10,12 +10,31 @@
 #import <UIKit/UIKit.h>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <unistd.h>
 
 extern "C" void ghostroom_harness_update(NSString *json);
 extern "C" NSArray<NSString *> *ghostroom_harness_take(void);
 extern "C" id ghostroom_harness_controller(void);
+extern "C" void ghostroom_harness_export(NSArray<NSString *> *paths, NSString *directory, NSString *title);
+
+/* Stand-in for Blender's GHOSTUIWindow: it consumes hardware key presses and owns a
+ * window-level long-press, exactly the behaviours that broke typing and menus when
+ * GHOSTroom lived inside Blender's window. */
+@interface BlenderLikeWindow : UIWindow
+@end
+
+@implementation BlenderLikeWindow
+- (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event
+{
+}
+- (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event
+{
+}
+@end
 
 @interface NSObject (GRHarness)
+- (void)showAgents;
 - (void)sendMessage;
 - (void)stopActive;
 - (void)toggleDock;
@@ -23,9 +42,23 @@ extern "C" id ghostroom_harness_controller(void);
 @end
 
 static int failures = 0;
+static const char *volatile lastStep = "launch";
+
+/* A frozen main thread cannot run the harness's own timeout. This background
+ * watchdog reports the last completed step and exits so CI shows where it hung. */
+static void StartWatchdog(void)
+{
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    [NSThread sleepForTimeInterval:75];
+    fprintf(stdout, "HARNESS WATCHDOG: main thread stuck after step '%s'\n", lastStep);
+    fflush(stdout);
+    _exit(4);
+  });
+}
 
 static void Check(BOOL ok, NSString *what)
 {
+  lastStep = strdup(what.UTF8String);
   printf("%s %s\n", ok ? "PASS" : "FAIL", what.UTF8String);
   fflush(stdout);
   if (!ok) {
@@ -78,7 +111,11 @@ static void Shot(UIWindow *window, NSString *name)
 {
   UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithBounds:window.bounds];
   UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-    [window drawViewHierarchyInRect:window.bounds afterScreenUpdates:YES];
+    for (UIWindow *each in window.windowScene.windows) {
+      if (!each.hidden) {
+        [each drawViewHierarchyInRect:window.bounds afterScreenUpdates:YES];
+      }
+    }
   }];
   NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
   NSString *path = [documents stringByAppendingPathComponent:[name stringByAppendingString:@".png"]];
@@ -102,7 +139,8 @@ static void After(double seconds, dispatch_block_t block)
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options
 {
-  self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+  self.window = [[BlenderLikeWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+  [self.window addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:nil action:nil]];
   UIViewController *blender = [[UIViewController alloc] init];
   blender.view.backgroundColor = [UIColor colorWithRed:0.16 green:0.16 blue:0.17 alpha:1];
   UILabel *label = [[UILabel alloc] init];
@@ -135,7 +173,11 @@ static void After(double seconds, dispatch_block_t block)
   ghostroom_harness_update(Snapshot(@"empty"));
   After(0.6, ^{
     UIView *pill = [controller valueForKey:@"pill"];
-    Check(pill != nil && pill.superview == self.window, @"pill installed in the host window");
+    Check(pill != nil && pill.window != nil && pill.window != self.window,
+          @"GHOSTroom lives in its own window, not Blender's");
+    Check(pill.window.windowLevel > self.window.windowLevel, @"GHOSTroom window sits above Blender");
+    Check([pill.window hitTest:CGPointMake(5, 5) withEvent:nil] == nil,
+          @"touches outside GHOSTroom fall through to Blender");
     Check(!pill.hidden, @"pill visible while GHOSTroom is closed");
     Check(Find(Commands(), @"ready") != nil, @"UI announced ready");
     Shot(self.window, @"01-closed-pill");
@@ -195,8 +237,28 @@ static void After(double seconds, dispatch_block_t block)
             [composer becomeFirstResponder];
             After(1.2, ^{
               Check(composer.isFirstResponder, @"composer takes keyboard focus");
+              Check(composer.window.isKeyWindow, @"GHOSTroom window is key while typing");
+              [composer insertText:@"typed"];
+              Check([composer.text hasSuffix:@"typed"], @"text input reaches the composer");
+              /* A docked software keyboard covering the lower 45% of the screen. */
+              CGRect screen = composer.window.screen.bounds;
+              CGRect keyboard = CGRectMake(0, screen.size.height * 0.55, screen.size.width, screen.size.height * 0.45);
+              [[NSNotificationCenter defaultCenter]
+                  postNotificationName:UIKeyboardWillChangeFrameNotification
+                                object:nil
+                              userInfo:@{UIKeyboardFrameEndUserInfoKey : [NSValue valueWithCGRect:keyboard],
+                                         UIKeyboardAnimationDurationUserInfoKey : @0}];
+              [composer.window layoutIfNeeded];
+              CGRect box = [composer convertRect:composer.bounds toView:nil];
+              Check(CGRectGetMaxY(box) <= CGRectGetMinY(keyboard) && CGRectGetMinY(box) >= 0,
+                    @"composer stays visible above a docked keyboard");
               Shot(self.window, @"06-keyboard");
               [composer resignFirstResponder];
+              [[NSNotificationCenter defaultCenter] postNotificationName:UIKeyboardWillHideNotification
+                                                                  object:nil
+                                                                userInfo:@{UIKeyboardAnimationDurationUserInfoKey : @0}];
+              Check(self.window.isKeyWindow, @"keyboard returns to Blender after typing");
+              composer.text = @"";
               CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
               ghostroom_harness_update(Snapshot(@"long"));
               After(1.0, ^{
@@ -205,6 +267,28 @@ static void After(double seconds, dispatch_block_t block)
                 Check([table numberOfRowsInSection:0] == [counts[@"long"] integerValue],
                       @"160-item timeline renders");
                 Shot(self.window, @"07-long");
+                UIButton *agentsButton = [controller valueForKey:@"agentsButton"];
+                Check(agentsButton != nil && !agentsButton.hidden && agentsButton.window != nil,
+                      @"Agents button is visible in the header");
+                [agentsButton sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+                After(1.0, ^{
+                UIViewController *presented = composer.window.rootViewController.presentedViewController;
+                Check([presented isKindOfClass:[UINavigationController class]], @"agents sheet opens");
+                UITableViewController *sheet = (UITableViewController *)
+                    ((UINavigationController *)presented).viewControllers.firstObject;
+                Check([sheet.tableView numberOfRowsInSection:0] >= 1 &&
+                          [sheet.tableView numberOfRowsInSection:1] >= 1,
+                      @"agents sheet lists agents and connectors");
+                Shot(self.window, @"08-agents");
+                Shot(composer.window, @"08b-agents-overlay");
+                [presented dismissViewControllerAnimated:NO completion:nil];
+                NSString *render = [NSTemporaryDirectory() stringByAppendingPathComponent:@"render_test.mp4"];
+                [@"x" writeToFile:render atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                ghostroom_harness_export(@[ render ], NSTemporaryDirectory(), @"Rendered into GHOSTpad/renders");
+                After(1.5, ^{
+                UIViewController *explain = composer.window.rootViewController.presentedViewController;
+                Check([explain isKindOfClass:[UIAlertController class]], @"render export offers Save to Files");
+                [explain dismissViewControllerAnimated:NO completion:nil];
                 [controller togglePanel];
                 After(0.8, ^{
                   UIView *pill = [controller valueForKey:@"pill"];
@@ -215,6 +299,8 @@ static void After(double seconds, dispatch_block_t block)
                   printf("HARNESS RESULT failures=%d\n", failures);
                   fflush(stdout);
                   exit(failures ? 1 : 0);
+                });
+                });
                 });
               });
             });
@@ -230,6 +316,7 @@ static void After(double seconds, dispatch_block_t block)
 int main(int argc, char *argv[])
 {
   setvbuf(stdout, nullptr, _IONBF, 0);
+  StartWatchdog();
   @autoreleasepool {
     return UIApplicationMain(argc, argv, nil, NSStringFromClass([HarnessDelegate class]));
   }

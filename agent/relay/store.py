@@ -55,6 +55,8 @@ ROOM_EVENT_TYPES = ('user', 'status', 'final', 'error', 'task', 'note')
 LEGACY_CHAT_TYPES = ('status', 'final', 'error')
 NOTE_CATEGORIES = ('decision', 'review', 'handoff', 'question', 'summary', 'warning')
 ROOM_TEXT = 16000
+# An external agent's session task ends after this long without a tool call.
+SESSION_IDLE_SECONDS = 15 * 60
 ARTIFACT_MAX_BYTES = 2_000_000
 ARTIFACT_KEEP = 300
 IMAGE_TYPES = ('image/png', 'image/jpeg')
@@ -186,6 +188,9 @@ class Store:
         for column, kind in TASK_COLUMNS:
             if column not in columns:
                 self.db.execute(f'ALTER TABLE chat_messages ADD COLUMN {column} {kind}')
+        columns = {row[1] for row in self.db.execute('PRAGMA table_info(participants)')}
+        if 'last_seen' not in columns:
+            self.db.execute('ALTER TABLE participants ADD COLUMN last_seen REAL')
         columns = {row[1] for row in self.db.execute('PRAGMA table_info(chat_events)')}
         for column in ('agent_id', 'payload'):
             if column not in columns:
@@ -263,6 +268,24 @@ class Store:
                 )
 
     # ------------------------------------------------------------------ participants
+
+    # Participants run by the relay's own Agent Router. Everyone else calling the
+    # MCP tools (GhostBlender Simple, registered connectors) is an external agent.
+    embedded = frozenset()
+
+    def touch_participant(self, participant_id):
+        """Record that a participant just used the bridge (throttled to one write a minute)."""
+        now = time.time()
+        with self.lock, self.db:
+            self.db.execute('UPDATE participants SET last_seen=? WHERE participant_id=? '
+                            'AND (last_seen IS NULL OR last_seen<?)', (now, participant_id, now - 60))
+
+    def external_participants(self):
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT participant_id,display_name,provider,client_label,last_seen,created,revoked "
+                "FROM participants WHERE kind='agent' AND revoked IS NULL ORDER BY participant_id").fetchall()
+        return [dict(row) for row in rows if row['participant_id'] not in self.embedded]
 
     def register_participant(self, participant_id, kind, display_name, provider=None):
         """Create a participant and return its new capability. Only a digest is stored."""
@@ -711,6 +734,7 @@ class Store:
                 "SELECT * FROM leases WHERE device_id=? AND state='active' AND expires<=?",
                 (device_id, now)).fetchall():
             self._end_lease(lease, 'expired', 'lease expiry reached')
+        self._close_idle_sessions(device_id, now)
         self.db.execute('DELETE FROM oauth WHERE expires<?', (now,))
         # Keep metadata/idempotency for seven days, images/results for one day.
         # The ledger is never pruned: it references jobs by id and digest only.
@@ -768,6 +792,10 @@ class Store:
             if active >= 8:
                 raise ValueError('device_queue_full')
             task = self._running_task(device_id, participant_id)
+            if task is None and participant_id not in self.embedded:
+                # External agents (GhostBlender Simple, connectors) work in sessions:
+                # their jobs become a GHOSTroom task the user can watch and stop.
+                task = self._start_session(device_id, participant_id)
             if task is not None and task['stop_requested'] is not None:
                 rejection = self._task_rejection(
                     device_id, participant_id, 'stopped_by_user',
@@ -1170,6 +1198,106 @@ class Store:
         return self.db.execute(
             "SELECT * FROM chat_messages WHERE device_id=? AND participant_id=? AND state IN ('running','stopping') "
             'ORDER BY started DESC LIMIT 1', (device_id, participant_id)).fetchone()
+
+    def _start_session(self, device_id, participant_id, title=None, message_id=None):
+        row = self.db.execute('SELECT display_name, client_label FROM participants WHERE participant_id=?',
+                              (participant_id,)).fetchone()
+        if participant_id == LEGACY:
+            name = (row['client_label'] if row else None) or 'GhostBlender Simple agent'
+        else:
+            name = (row['client_label'] or row['display_name']) if row else participant_id
+        text = title or f'{name} working through GhostBlender'
+        message_id = message_id or uuid.uuid4().hex
+        now = time.time()
+        self.db.execute(
+            'INSERT INTO chat_messages(device_id,message_id,text,state,created,started,agent_id,participant_id,'
+            "mode,role,context,read_only) VALUES (?,?,?,'running',?,?,?,?,'do','primary','[]',0)",
+            (device_id, message_id, text[:2000], now, now, participant_id, participant_id))
+        self._task_event_locked(device_id, message_id, 'running')
+        return self.db.execute('SELECT * FROM chat_messages WHERE device_id=? AND message_id=?',
+                               (device_id, message_id)).fetchone()
+
+    def _close_idle_sessions(self, device_id, now):
+        for row in self.db.execute(
+                "SELECT * FROM chat_messages WHERE device_id=? AND state IN ('running','stopping') "
+                'AND participant_id IS NOT NULL', (device_id,)).fetchall():
+            if row['participant_id'] in self.embedded:
+                continue
+            last = self.db.execute('SELECT max(created) FROM jobs WHERE task_id=?', (row['message_id'],)).fetchone()[0]
+            if max(last or 0, row['started'] or 0) < now - SESSION_IDLE_SECONDS:
+                state = 'stopped' if row['stop_requested'] is not None else 'completed'
+                self.db.execute('UPDATE chat_messages SET state=?, finished=? WHERE device_id=? AND message_id=?',
+                                (state, now, device_id, row['message_id']))
+                self._task_event_locked(device_id, row['message_id'], state)
+
+    def room_inbox(self, device_id, participant_id):
+        """What an external agent should know right now: instructions addressed to it and its task."""
+        with self.lock, self.db:
+            self._expire(device_id)
+            queued = self.db.execute(
+                "SELECT * FROM chat_messages WHERE device_id=? AND agent_id=? AND state IN ('queued','steer') "
+                'ORDER BY created', (device_id, participant_id)).fetchall()
+            running = self._running_task(device_id, participant_id)
+        return {'inbox': [self._task_view(row) for row in queued],
+                'current_task': self._task_view(running) if running is not None else None}
+
+    def room_start(self, device_id, participant_id, task_id=None, title=None):
+        """An external agent claims an instruction addressed to it, or names what it is doing."""
+        with self.lock, self.db:
+            running = self._running_task(device_id, participant_id)
+            if task_id:
+                row = self.db.execute(
+                    "SELECT * FROM chat_messages WHERE device_id=? AND message_id=? AND agent_id=? "
+                    "AND state IN ('queued','steer')", (device_id, task_id, participant_id)).fetchone()
+                if row is None:
+                    raise ValueError('task_not_addressed_to_you_or_not_queued')
+                if running is not None and running['message_id'] != task_id:
+                    self._finish_locked(device_id, running, None)
+                self.db.execute("UPDATE chat_messages SET state='running', started=?, participant_id=?, "
+                                'steered_into=NULL WHERE device_id=? AND message_id=?',
+                                (time.time(), participant_id, device_id, task_id))
+                self._task_event_locked(device_id, task_id, 'running')
+            elif running is not None and title:
+                self.db.execute('UPDATE chat_messages SET text=? WHERE device_id=? AND message_id=?',
+                                (title.strip()[:2000], device_id, running['message_id']))
+                task_id = running['message_id']
+                self._task_event_locked(device_id, task_id, 'running')
+            elif running is not None:
+                task_id = running['message_id']
+            else:
+                task_id = self._start_session(device_id, participant_id, title and title.strip())['message_id']
+            return self._task_view(self.db.execute('SELECT * FROM chat_messages WHERE device_id=? AND message_id=?',
+                                                   (device_id, task_id)).fetchone())
+
+    def room_post(self, device_id, participant_id, text, kind='reply'):
+        """An external agent speaks in GHOSTroom: progress narration, or a reply that ends its task."""
+        if kind not in ('reply', 'progress') or not isinstance(text, str) or not text.strip():
+            raise ValueError('invalid_room_post')
+        text = text.strip()[:ROOM_TEXT]
+        with self.lock, self.db:
+            running = self._running_task(device_id, participant_id)
+            if kind == 'progress':
+                if running is None:
+                    running = self._start_session(device_id, participant_id)
+                self._chat_event_locked(device_id, running['message_id'], 'status', text[:600],
+                                        agent_id=participant_id, limit=ROOM_TEXT)
+                return {'task_id': running['message_id'], 'posted': 'progress'}
+            if running is None:
+                self._chat_event_locked(device_id, None, 'final', text, agent_id=participant_id, limit=ROOM_TEXT)
+                self._ledger(device_id, participant_id, 'response', text[:2000])
+                return {'task_id': None, 'posted': 'reply'}
+            self._finish_locked(device_id, running, text)
+            return {'task_id': running['message_id'], 'posted': 'reply', 'task_state': 'finished'}
+
+    def _finish_locked(self, device_id, row, text):
+        state = 'stopped' if row['stop_requested'] is not None else 'completed'
+        self.db.execute('UPDATE chat_messages SET state=?, finished=? WHERE device_id=? AND message_id=?',
+                        (state, time.time(), device_id, row['message_id']))
+        if text:
+            self._chat_event_locked(device_id, row['message_id'], 'final', text, agent_id=row['agent_id'],
+                                    limit=ROOM_TEXT)
+            self._ledger(device_id, row['participant_id'] or LEGACY, 'response', text[:2000])
+        self._task_event_locked(device_id, row['message_id'], state)
 
     def _task_rejection(self, device_id, participant_id, code, message, request_id, operation):
         value = failure(code, 'router', message, False, 'after_user_action')

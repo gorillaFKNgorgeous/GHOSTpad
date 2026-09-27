@@ -73,8 +73,10 @@ class CodexAdapter(AgentAdapter):
     capabilities = ('discuss', 'inspect', 'plan', 'execute', 'capture', 'vision', 'review', 'teach',
                     'long_running')
     can_steer = True
+    setup_methods = ('sign_in', 'sign_out')
 
     def __init__(self):
+        self._login = {'state': 'idle'}
         self._codex = None
         self._thread = None
         self._sdk = None
@@ -157,6 +159,59 @@ class CodexAdapter(AgentAdapter):
         self._thread = codex.thread_start(**options)
         self.store.chat_set_thread_id(self.device_id, self._thread.id)
         return self._thread
+
+    # -- setup from GHOSTroom ------------------------------------------------
+
+    def setup(self, op, value=None):
+        from openai_codex import Codex
+
+        if op == 'sign_out':
+            with self._lock:
+                codex = Codex()
+                try:
+                    codex.logout()
+                finally:
+                    codex.close()
+                self.close()
+            self._login = {'state': 'idle', 'message': 'Signed out of Codex'}
+            return 'Signed out of Codex'
+        if op != 'sign_in':
+            raise ValueError('setup_not_supported')
+        if self._login.get('state') == 'pending':
+            return 'Sign-in already in progress'
+        codex = Codex()
+        try:
+            account = codex.account()
+            if getattr(account, 'account', None) is not None:
+                codex.close()
+                self._login = {'state': 'done', 'message': 'Codex is already signed in'}
+                return self._login['message']
+            login = codex.login_chatgpt_device_code()
+        except Exception:
+            codex.close()
+            raise
+        self._login = {'state': 'pending', 'url': str(login.verification_url), 'code': str(login.user_code),
+                       'message': 'Open the link, sign in to ChatGPT and enter the code'}
+
+        def wait():
+            try:
+                completed = login.wait()
+                ok = bool(getattr(completed, 'success', False))
+                self._login = {'state': 'done' if ok else 'error',
+                               'message': 'Codex signed in' if ok else 'Codex sign-in did not complete'}
+            except Exception as exc:
+                self._login = {'state': 'error', 'message': f'Codex sign-in failed: {type(exc).__name__}'}
+            finally:
+                codex.close()
+                with self._lock:
+                    if self._handle is None:
+                        self.close()  # the next turn re-opens Codex with the new session
+
+        threading.Thread(target=wait, daemon=True, name='codex-sign-in').start()
+        return self._login['message']
+
+    def setup_state(self):
+        return dict(self._login)
 
     # -- AgentAdapter ---------------------------------------------------------
 

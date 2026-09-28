@@ -236,16 +236,25 @@ class Runtime:
                 raise RuntimeError('screenshot_failed')
         elif source == 'render_result':
             source_image = bpy.data.images.get('Render Result')
-            if not source_image or not source_image.has_data:
+            if not source_image:
                 raise ValueError('no_render_result; run a render first')
+            # A finished Render Result reports has_data=False and size 0x0 on device
+            # (its pixels live in the render, not an image buffer), so only a failed
+            # save means there is nothing to capture.
+            with contextlib.suppress(FileNotFoundError):
+                path.unlink()
             # Saving a Render Result uses the active scene's color management.
             settings = bpy.context.scene.render.image_settings
             old_format = settings.file_format
             try:
                 settings.file_format = 'PNG'
                 source_image.save_render(str(path), scene=bpy.context.scene)
+            except RuntimeError as exc:
+                raise ValueError('no_render_result; run a render first') from exc
             finally:
                 settings.file_format = old_format
+            if not path.is_file() or not path.stat().st_size:
+                raise ValueError('no_render_result; run a render first')
         else:
             raise ValueError('source must be screenshot or render_result')
         image = bpy.data.images.load(str(path), check_existing=False)

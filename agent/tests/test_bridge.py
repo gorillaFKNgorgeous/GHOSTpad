@@ -325,6 +325,42 @@ class RuntimeTests(unittest.TestCase):
             self.runtime.execute_python('while True:\n    pass',time_limit=.1)
         self.assertIsNone(sys.gettrace())
 
+    def _render_bpy(self, render_result):
+        class Image:
+            def __init__(self, path):
+                self.path, self.size = path, (640, 360)
+            def scale(self, width, height):
+                self.size = (width, height)
+            def save(self):
+                Path(self.filepath_raw).write_bytes(b'png')
+        images = types.SimpleNamespace(get=lambda name: render_result if name == 'Render Result' else None,
+                                       load=lambda path, check_existing=False: Image(path),
+                                       remove=lambda image: None)
+        settings = types.SimpleNamespace(file_format='OPEN_EXR')
+        scene = types.SimpleNamespace(render=types.SimpleNamespace(image_settings=settings))
+        return types.SimpleNamespace(data=types.SimpleNamespace(images=images),
+                                     context=types.SimpleNamespace(scene=scene)), settings
+
+    def test_render_result_capture_does_not_trust_has_data(self):
+        # On device a finished Render Result reports has_data=False and size 0x0.
+        rendered = types.SimpleNamespace(has_data=False, size=(0, 0),
+                                         save_render=lambda path, scene: Path(path).write_bytes(b'png'))
+        self.runtime.bpy, settings = self._render_bpy(rendered)
+        value = self.runtime.capture('render_result', 320)
+        self.assertEqual((value['width'], value['height']), (320, 180))
+        self.assertEqual(settings.file_format, 'OPEN_EXR')
+
+    def test_render_result_capture_without_a_render(self):
+        def fail(path, scene):
+            raise RuntimeError('Error: Could not acquire buffer from image')
+        self.runtime.bpy, settings = self._render_bpy(types.SimpleNamespace(has_data=False, save_render=fail))
+        with self.assertRaisesRegex(ValueError, 'no_render_result'):
+            self.runtime.capture('render_result')
+        self.assertEqual(settings.file_format, 'OPEN_EXR')
+        self.runtime.bpy, _ = self._render_bpy(None)
+        with self.assertRaisesRegex(ValueError, 'no_render_result'):
+            self.runtime.capture('render_result')
+
 
 class HttpAndOAuthTests(unittest.TestCase):
     def setUp(self):
